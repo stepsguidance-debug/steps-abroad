@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const mongoose = require("mongoose");
+const { connectDatabases } = require("./db");
 
 const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
@@ -17,7 +17,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/", (_req, res) => res.json({ ok: true, service: "steps-guidance-api" }));
+app.get("/", (_req, res) => {
+  res.json({ ok: true, service: "steps-guidance-api" });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
@@ -31,10 +33,11 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGODB_URI).then(() => {
-  console.log("Mongo connected");
+
+connectDatabases().then(({ admin, students }) => {
+  console.log(`Mongo connected: ${admin}, ${students}`);
   app.listen(PORT, () => console.log(`API listening on :${PORT}`));
-}).catch((e) => {
-  console.error("Mongo connection failed", e);
+}).catch((error) => {
+  console.error("Mongo connection failed", error);
   process.exit(1);
 });

@@ -13,20 +13,20 @@ const AdminLayout = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex w-full">
-      <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
-        <div className="p-5 flex items-center gap-3 border-b border-sidebar-border">
+    <div className="min-h-screen w-full overflow-x-hidden lg:flex">
+      <aside className="w-full shrink-0 bg-sidebar border-b border-sidebar-border lg:w-64 lg:border-b-0 lg:border-r flex flex-col">
+        <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-sidebar-border">
           <div className="h-10 w-10 rounded-xl btn-gold flex items-center justify-center">
             <GraduationCap className="h-5 w-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-bold leading-tight">
               <span className="gold-text">Steps</span> Guidance
             </p>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Admin Console</p>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-1">
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}
               className={({ isActive }) =>
@@ -35,7 +35,7 @@ const AdminLayout = () => {
                 }`
               }>
               <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className="min-w-0 truncate">{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -47,12 +47,12 @@ const AdminLayout = () => {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col">
-        <header className="h-16 border-b border-border px-8 flex items-center justify-between">
+      <div className="min-w-0 flex-1 flex flex-col">
+        <header className="min-h-16 border-b border-border px-4 py-3 sm:px-6 lg:px-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-semibold">Welcome, {user?.name ?? "Admin"}</h1>
-          <span className="text-xs text-muted-foreground">{user?.email}</span>
+          <span className="min-w-0 text-xs text-muted-foreground break-all sm:text-right">{user?.email}</span>
         </header>
-        <main className="flex-1 p-8 overflow-auto">
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

@@ -1,37 +1,71 @@
 const router = require("express").Router();
-const Response = require("../models/Response");
-const Result = require("../models/Result");
-const User = require("../models/User");
 const Question = require("../models/Question");
+const Response = require("../models/Response");
+const StudentAccount = require("../models/StudentAccount");
 const { verifyJWT } = require("../middleware/auth");
-const { analyzeProfile, checkAiRisk } = require("../services/gemini");
+const { generateResultForUser } = require("../services/resultService");
 
 router.post("/submit", verifyJWT, async (req, res, next) => {
   try {
-    const { answers } = req.body;
-    if (!Array.isArray(answers) || !answers.length) return res.status(400).json({ error: "No answers" });
+    if (req.user.role !== "student") {
+      return res.status(403).json({ error: "Student only" });
+    }
 
-    await Response.create({ userId: req.user._id, answers });
-    await User.findByIdAndUpdate(req.user._id, { status: "completed" });
+    const existingResponse = await Response.findOne({ userId: req.user._id }).lean();
+    if (existingResponse) {
+      return res.status(409).json({ error: "Assessment already completed. Retakes are not allowed." });
+    }
+
+    const { answers } = req.body;
+    if (!Array.isArray(answers) || !answers.length) {
+      return res.status(400).json({ error: "No answers provided" });
+    }
 
     const questions = await Question.find().lean();
-    const profile = await analyzeProfile({ user: req.user, questions, answers });
+    if (answers.length !== questions.length) {
+      return res.status(400).json({ error: `Expected ${questions.length} answers` });
+    }
+    const questionMap = new Map(questions.map((question) => [String(question._id), question]));
 
-    // Enrich career roles in parallel with AI risk
-    const enrich = async (item) => {
-      const risk = await checkAiRisk(item.title);
-      return { ...item, ...risk };
-    };
-    profile.careerFit.primary   = await Promise.all(profile.careerFit.primary.map(enrich));
-    profile.careerFit.secondary = await Promise.all(profile.careerFit.secondary.map(enrich));
+    const normalizedAnswers = answers.map((answer) => {
+      const question = questionMap.get(String(answer.questionId));
+      if (!question) {
+        const error = new Error(`Question not found: ${answer.questionId}`);
+        error.status = 400;
+        throw error;
+      }
 
-    const saved = await Result.findOneAndUpdate(
-      { userId: req.user._id },
-      { ...profile, userId: req.user._id, userName: req.user.name, generatedAt: new Date() },
-      { upsert: true, new: true },
-    );
-    res.json(saved);
-  } catch (e) { next(e); }
+      const choice = question.choices.find((item) => item.value === answer.value || item.value === answer.selectedValue);
+      if (!choice) {
+        const error = new Error(`Invalid answer choice for question ${question._id}`);
+        error.status = 400;
+        throw error;
+      }
+
+      const customAnswer = String(answer.customAnswer || "").trim();
+      if (choice.allowCustomInput && !customAnswer) {
+        const error = new Error(`Custom answer is required for ${question.questionText}`);
+        error.status = 400;
+        throw error;
+      }
+
+      return {
+        questionId: question._id,
+        section: question.section,
+        selectedValue: choice.allowCustomInput && customAnswer ? customAnswer : choice.value,
+        selectedLabel: choice.allowCustomInput && customAnswer ? customAnswer : choice.label,
+        customAnswer,
+      };
+    });
+
+    await Response.create({ userId: req.user._id, answers: normalizedAnswers });
+    await StudentAccount.findByIdAndUpdate(req.user._id, { status: "answered" });
+
+    const result = await generateResultForUser(req.user._id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

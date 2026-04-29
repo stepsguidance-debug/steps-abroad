@@ -19,7 +19,7 @@ const Results = () => {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border px-6 md:px-10 py-4 flex items-center justify-between">
+      <header className="border-b border-border px-4 py-4 sm:px-6 lg:px-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl btn-gold flex items-center justify-center"><GraduationCap className="h-5 w-5" /></div>
           <p className="font-bold"><span className="gold-text">Steps</span> Guidance</p>
@@ -29,7 +29,7 @@ const Results = () => {
           <LogOut className="h-4 w-4" /> Sign out
         </button>
       </header>
-      <main className="max-w-5xl mx-auto px-6 md:px-10 py-10">
+      <main className="max-w-5xl mx-auto w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
         {loading ? <p className="text-muted-foreground">Loading your results…</p>
           : result ? <ResultDashboard result={result} />
           : <p className="text-muted-foreground">No result yet — please complete the assessment.</p>}

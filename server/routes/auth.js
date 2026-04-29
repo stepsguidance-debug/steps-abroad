@@ -1,22 +1,31 @@
 const router = require("express").Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const AdminAccount = require("../models/AdminAccount");
+const StudentAccount = require("../models/StudentAccount");
+const { serializeUser } = require("../middleware/auth");
 
 router.post("/login", async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
-    const user = await User.findOne({ email: String(email).toLowerCase() });
+    const identifier = String(email || "").trim().toLowerCase();
+    if (!identifier || !password || !role) {
+      return res.status(400).json({ error: "Missing credentials" });
+    }
+
+    const Model = role === "admin" ? AdminAccount : StudentAccount;
+    const query = role === "admin" ? { username: identifier } : { email: identifier };
+    const user = await Model.findOne(query);
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-    if (role && user.role !== role) return res.status(403).json({ error: `Not a ${role} account` });
-    const ok = await bcrypt.compare(password, user.passwordHash);
+
+    const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
-    const token = jwt.sign({ sub: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    res.json({
-      token,
-      user: { _id: user._id, name: user.name, email: user.email, role: user.role },
-    });
-  } catch (e) { next(e); }
+
+    const token = jwt.sign({ sub: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user: serializeUser(user) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

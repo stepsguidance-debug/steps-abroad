@@ -16,11 +16,10 @@ const StatCard = ({ icon: Icon, label, value, accent }: { icon: typeof Users; la
 
 const StatusBadge = ({ status }: { status: Student["status"] }) => {
   const map = {
-    completed:   "bg-success/15 text-success border-success/30",
-    in_progress: "bg-primary/15 text-primary border-primary/30",
-    pending:     "bg-muted text-muted-foreground border-border",
+    answered: "bg-success/15 text-success border-success/30",
+    pending: "bg-muted text-muted-foreground border-border",
   } as const;
-  const label = { completed: "Completed", in_progress: "In progress", pending: "Pending" }[status];
+  const label = { answered: "Answered", pending: "Pending" }[status];
   return <span className={`text-[10px] px-2 py-0.5 rounded-full border ${map[status]}`}>{label}</span>;
 };
 
@@ -33,8 +32,8 @@ const Overview = () => {
   }, []);
 
   const total = students.length;
-  const answered = students.filter((s) => s.status === "completed").length;
-  const pending = students.filter((s) => s.status !== "completed").length;
+  const answered = students.filter((s) => s.status === "answered").length;
+  const pending = students.filter((s) => s.status !== "answered").length;
   const completedScores = students.map((s) => s.aiReadiness).filter((v): v is number => typeof v === "number");
   const avgReadiness = completedScores.length
     ? Math.round(completedScores.reduce((a, b) => a + b, 0) / completedScores.length)
@@ -44,7 +43,7 @@ const Overview = () => {
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard icon={Users} label="Total students" value={total} />
-        <StatCard icon={CheckCircle2} label="Completed" value={answered} />
+        <StatCard icon={CheckCircle2} label="Answered" value={answered} />
         <StatCard icon={Clock} label="Pending" value={pending} />
         <StatCard icon={Sparkles} label="Avg AI Readiness" value={`${avgReadiness}%`} accent />
       </div>
@@ -78,7 +77,7 @@ const Overview = () => {
                   </div>
                 </div>
               );
-              return s.status === "completed" ? (
+              return s.status === "answered" ? (
                 <Link key={s._id} to={`/admin/results/${s._id}`}>{card}</Link>
               ) : (
                 <div key={s._id}>{card}</div>

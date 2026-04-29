@@ -45,14 +45,14 @@ const ManageUsers = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold">Manage Users</h2>
           <p className="text-sm text-muted-foreground">Add, view and remove student accounts.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="btn-gold"><Plus className="h-4 w-4 mr-1" /> Add Student</Button>
+            <Button className="btn-gold w-full sm:w-auto"><Plus className="h-4 w-4 mr-1" /> Add Student</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add a new student</DialogTitle></DialogHeader>
@@ -70,7 +70,8 @@ const ManageUsers = () => {
       </div>
 
       <div className="glass-card overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="w-full overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-sm">
           <thead className="bg-secondary/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3">Name</th>
@@ -96,6 +97,7 @@ const ManageUsers = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>

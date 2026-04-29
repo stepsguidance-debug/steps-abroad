@@ -32,8 +32,8 @@ const Login = () => {
 
   const fillDemo = () => {
     if (role === "admin") {
-      setEmail("admin@stepsguidance.com");
-      setPassword("Admin123!");
+      setEmail("admin");
+      setPassword("admin123");
     } else {
       setEmail("student@example.com");
       setPassword("demo");
@@ -78,10 +78,12 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              {role === "admin" ? "Username" : "Email"}
+            </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+              <input type={role === "admin" ? "text" : "email"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={role === "admin" ? "admin" : "you@example.com"}
                 className="w-full rounded-xl border border-border bg-background/40 pl-10 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition" />
             </div>
           </div>

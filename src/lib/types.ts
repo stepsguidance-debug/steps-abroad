@@ -5,47 +5,76 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  status?: "pending" | "answered";
 }
 
 export interface Student extends User {
   role: "student";
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "answered";
   aiReadiness: number | null;
 }
 
-export type QuestionType = "mcq" | "scale" | "forced";
+export type QuestionType = "mcq" | "scale" | "forced-choice";
+
+export interface QuestionChoice {
+  label: string;
+  value: string;
+  allowCustomInput?: boolean;
+  customInputPlaceholder?: string;
+  weights: {
+    analytical: number;
+    creative: number;
+    applied: number;
+    social: number;
+    aiReadiness: number;
+  };
+}
 
 export interface Question {
   _id: string;
   section: string;
   sectionTitle: string;
-  text: string;
+  questionText: string;
   type: QuestionType;
-  options?: string[];
+  layer: "L1" | "L2" | "L3" | "L4" | "L5";
+  choices: QuestionChoice[];
   order: number;
 }
 
-export type AiRisk = "low" | "medium" | "high";
+export interface NewQuestionInput {
+  section: string;
+  questionText: string;
+  type: QuestionType;
+  layer: "L1" | "L2" | "L3" | "L4" | "L5";
+  choices: QuestionChoice[];
+}
 
-export interface CareerFitItem {
+export type AiRisk = "safe" | "at-risk" | "high-risk";
+
+export interface CareerJobRole {
   title: string;
-  ug: string;
-  pg: string;
-  roles: string[];
   aiRisk: AiRisk;
   advice: string;
 }
 
+export interface CareerFitItem {
+  career: string;
+  matchPercent: number;
+  ugDegrees: string[];
+  pgDegrees: string[];
+  jobRoles: CareerJobRole[];
+}
+
 export interface SectionScore {
   section: string;
-  title: string;
   score: number;
   fit: "Strong" | "Moderate" | "Weak";
 }
 
-export interface ContradictionFlag {
-  area: string;
-  note: string;
+export interface BehaviourProfile {
+  ambiguity: "High" | "Medium" | "Low";
+  discipline: "High" | "Medium" | "Low";
+  riskAppetite: "High" | "Medium" | "Low";
 }
 
 export interface Result {
@@ -53,12 +82,12 @@ export interface Result {
   userId: string;
   userName: string;
   aiReadinessIndex: number;
-  traitScores: { Analytical: number; Creative: number; Applied: number; Social: number };
-  behaviourProfile: string;
+  traitScores: { analytical: number; creative: number; applied: number; social: number };
+  behaviourProfile: BehaviourProfile;
   sectionScores: SectionScore[];
-  contradictionFlags: ContradictionFlag[];
-  careerFit: { primary: CareerFitItem[]; secondary: CareerFitItem[] };
-  aiSummary: string;
+  contradictionFlags: string[];
+  careerFit: { primary: CareerFitItem; secondary: CareerFitItem; rejected: string[] };
+  aiSuggestionSummary: string;
   generatedAt: string;
 }
 

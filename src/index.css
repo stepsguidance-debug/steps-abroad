@@ -61,7 +61,7 @@
 
 @layer base {
   * { @apply border-border; }
-  html, body, #root { min-height: 100%; }
+  html, body, #root { min-height: 100%; width: 100%; overflow-x: clip; }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -69,6 +69,7 @@
       radial-gradient(ellipse at top right, hsl(38 91% 55% / 0.08), transparent 50%),
       radial-gradient(ellipse at bottom left, hsl(227 64% 30% / 0.4), transparent 50%);
     background-attachment: fixed;
+    overflow-x: hidden;
   }
   h1, h2, h3, h4 { font-family: 'Playfair Display', 'Inter', serif; letter-spacing: -0.02em; }
 }

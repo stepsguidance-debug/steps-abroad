@@ -1,17 +1,42 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const AdminAccount = require("../models/AdminAccount");
+const StudentAccount = require("../models/StudentAccount");
+
+function serializeUser(user) {
+  if (!user) return null;
+  if (user.role === "admin") {
+    return {
+      _id: user._id,
+      name: user.username,
+      email: user.username,
+      username: user.username,
+      role: "admin",
+    };
+  }
+
+  return {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: "student",
+    status: user.status,
+  };
+}
 
 async function verifyJWT(req, res, next) {
   try {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) return res.status(401).json({ error: "Missing token" });
+
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.sub).lean();
+    const Model = payload.role === "admin" ? AdminAccount : StudentAccount;
+    const user = await Model.findById(payload.sub).lean();
     if (!user) return res.status(401).json({ error: "Invalid token" });
-    req.user = user;
+
+    req.user = serializeUser(user);
     next();
-  } catch (e) {
+  } catch (_error) {
     res.status(401).json({ error: "Invalid token" });
   }
 }
@@ -21,4 +46,8 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { verifyJWT, requireAdmin };
+module.exports = {
+  verifyJWT,
+  requireAdmin,
+  serializeUser,
+};

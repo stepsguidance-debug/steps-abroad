@@ -5,7 +5,7 @@ import {
   MOCK_RESULTS,
   MOCK_STUDENTS,
 } from "./mocks";
-import type { AuthResponse, Question, Result, Student, User } from "./types";
+import type { AuthResponse, NewQuestionInput, Question, Result, Student, User } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
 export const USING_MOCKS = !BASE_URL;
@@ -33,7 +33,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// Mutable in-memory copies for mock CRUD
 let mockStudents: Student[] = [...MOCK_STUDENTS];
 const mockResults: Record<string, Result> = { ...MOCK_RESULTS };
 
@@ -42,12 +41,10 @@ export const apiClient = {
 
   async login(email: string, password: string, role: "admin" | "student"): Promise<AuthResponse> {
     if (USING_MOCKS) {
-      // Demo creds
-      if (role === "admin" && email === "admin@stepsguidance.com" && password === "Admin123!") {
+      if (role === "admin" && email === "admin" && password === "admin123") {
         return { token: "mock-admin-token", user: MOCK_ADMIN };
       }
       if (role === "student") {
-        // accept any non-empty creds for the demo
         if (!email || !password) throw new Error("Enter email and password");
         return {
           token: "mock-student-token",
@@ -64,12 +61,12 @@ export const apiClient = {
 
   async getStudents(): Promise<Student[]> {
     if (USING_MOCKS) return mockStudents;
-    return request<Student[]>("/api/admin/users");
+    return request<Student[]>("/api/admin/students");
   },
 
   async addStudent(input: { name: string; email: string; password: string }): Promise<Student> {
     if (USING_MOCKS) {
-      const s: Student = {
+      const student: Student = {
         _id: `s-${Date.now()}`,
         name: input.name,
         email: input.email,
@@ -77,10 +74,10 @@ export const apiClient = {
         status: "pending",
         aiReadiness: null,
       };
-      mockStudents = [s, ...mockStudents];
-      return s;
+      mockStudents = [student, ...mockStudents];
+      return student;
     }
-    return request<Student>("/api/admin/users", {
+    return request<Student>("/api/admin/students", {
       method: "POST",
       body: JSON.stringify(input),
     });
@@ -88,10 +85,10 @@ export const apiClient = {
 
   async deleteStudent(id: string): Promise<void> {
     if (USING_MOCKS) {
-      mockStudents = mockStudents.filter((s) => s._id !== id);
+      mockStudents = mockStudents.filter((student) => student._id !== id);
       return;
     }
-    await request<void>(`/api/admin/users/${id}`, { method: "DELETE" });
+    await request<void>(`/api/admin/students/${id}`, { method: "DELETE" });
   },
 
   async getQuestions(): Promise<Question[]> {
@@ -99,10 +96,40 @@ export const apiClient = {
     return request<Question[]>("/api/questions");
   },
 
-  async submitResponses(answers: Array<{ questionId: string; value: string | number }>): Promise<Result> {
+  async addQuestion(input: NewQuestionInput): Promise<Question> {
     if (USING_MOCKS) {
-      // Simulate AI thinking
-      await new Promise((r) => setTimeout(r, 1800));
+      const created: Question = { _id: `q-${Date.now()}`, order: MOCK_QUESTIONS.length + 1, ...input };
+      (MOCK_QUESTIONS as Question[]).push(created);
+      return created;
+    }
+    return request<Question>("/api/questions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async deleteQuestion(id: string): Promise<void> {
+    if (USING_MOCKS) {
+      const index = MOCK_QUESTIONS.findIndex((question) => question._id === id);
+      if (index >= 0) (MOCK_QUESTIONS as Question[]).splice(index, 1);
+      return;
+    }
+    await request<void>(`/api/questions/${id}`, { method: "DELETE" });
+  },
+
+  async deleteQuestionOption(questionId: string, optionValue: string): Promise<Question> {
+    if (USING_MOCKS) {
+      const question = MOCK_QUESTIONS.find((item) => item._id === questionId);
+      if (!question) throw new Error("Question not found");
+      question.choices = question.choices.filter((choice) => choice.value !== optionValue);
+      return question;
+    }
+    return request<Question>(`/api/questions/${questionId}/options/${encodeURIComponent(optionValue)}`, { method: "DELETE" });
+  },
+
+  async submitResponses(answers: Array<{ questionId: string; value: string; customAnswer?: string }>): Promise<Result> {
+    if (USING_MOCKS) {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
       return mockResults["current-student"];
     }
     return request<Result>("/api/responses/submit", {
