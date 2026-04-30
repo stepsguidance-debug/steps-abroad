@@ -3,7 +3,70 @@ const Question = require("../models/Question");
 const Response = require("../models/Response");
 const StudentAccount = require("../models/StudentAccount");
 const { verifyJWT } = require("../middleware/auth");
-const { generateResultForUser } = require("../services/resultService");
+const { queuedGenerate } = require("../services/resultService");
+
+// Save partial draft progress
+router.patch("/draft", verifyJWT, async (req, res, next) => {
+  try {
+    if (req.user.role !== "student") return res.status(403).json({ error: "Student only" });
+
+    const { answers } = req.body;
+    if (!Array.isArray(answers)) return res.status(400).json({ error: "answers must be an array" });
+
+    const questions = await Question.find().lean();
+    const questionMap = new Map(questions.map((q) => [String(q._id), q]));
+
+    const normalized = [];
+    for (const a of answers) {
+      const q = questionMap.get(String(a.questionId));
+      if (!q) continue;
+      const choice = q.choices.find((c) => c.value === (a.selectedValue || a.value));
+      if (!choice && !a.customAnswer) continue;
+      normalized.push({
+        questionId: q._id,
+        section: q.section,
+        selectedValue: a.selectedValue || a.value || "",
+        selectedLabel: a.selectedLabel || choice?.label || a.selectedValue || "",
+        customAnswer: a.customAnswer || "",
+      });
+    }
+
+    const existing = await Response.findOne({ userId: req.user._id });
+    if (existing && !existing.isDraft) {
+      return res.status(409).json({ error: "Assessment already submitted" });
+    }
+
+    await Response.findOneAndUpdate(
+      { userId: req.user._id },
+      { userId: req.user._id, isDraft: true, answers: normalized, submittedAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    res.json({ ok: true, count: normalized.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get current draft for the logged-in student
+router.get("/draft", verifyJWT, async (req, res, next) => {
+  try {
+    if (req.user.role !== "student") return res.status(403).json({ error: "Student only" });
+    const draft = await Response.findOne({ userId: req.user._id, isDraft: true }).lean();
+    if (!draft) return res.status(404).json({ error: "No draft" });
+    res.json({
+      answers: draft.answers.map((a) => ({
+        questionId: String(a.questionId),
+        selectedValue: a.selectedValue,
+        selectedLabel: a.selectedLabel,
+        customAnswer: a.customAnswer,
+      })),
+      savedAt: draft.submittedAt,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post("/submit", verifyJWT, async (req, res, next) => {
   try {
@@ -12,7 +75,7 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
     }
 
     const existingResponse = await Response.findOne({ userId: req.user._id }).lean();
-    if (existingResponse) {
+    if (existingResponse && existingResponse.isDraft === false) {
       return res.status(409).json({ error: "Assessment already completed. Retakes are not allowed." });
     }
 
@@ -58,10 +121,14 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
       };
     });
 
-    await Response.create({ userId: req.user._id, answers: normalizedAnswers });
+    await Response.findOneAndUpdate(
+      { userId: req.user._id },
+      { userId: req.user._id, isDraft: false, answers: normalizedAnswers, submittedAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
     await StudentAccount.findByIdAndUpdate(req.user._id, { status: "answered" });
 
-    const result = await generateResultForUser(req.user._id);
+    const result = await queuedGenerate(req.user._id);
     res.json(result);
   } catch (error) {
     next(error);

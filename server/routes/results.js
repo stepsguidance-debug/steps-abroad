@@ -2,7 +2,14 @@ const router = require("express").Router();
 const Result = require("../models/Result");
 const StudentAccount = require("../models/StudentAccount");
 const { verifyJWT } = require("../middleware/auth");
-const { generateResultForUser } = require("../services/resultService");
+const { queuedGenerate, queuePositionFor, isQueueProcessing } = require("../services/resultService");
+
+router.get("/queue-status", verifyJWT, (req, res) => {
+  res.json({
+    position: queuePositionFor(String(req.user._id)),
+    isProcessing: isQueueProcessing(),
+  });
+});
 
 router.get("/:userId", verifyJWT, async (req, res, next) => {
   try {
@@ -32,7 +39,7 @@ router.post("/generate/:userId", verifyJWT, async (req, res, next) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const result = await generateResultForUser(req.params.userId);
+    const result = await queuedGenerate(req.params.userId);
     res.json(result);
   } catch (error) {
     next(error);
