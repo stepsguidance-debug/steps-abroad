@@ -411,6 +411,11 @@ const EDUCATION_LEVEL_QUESTION = "What is your highest completed qualification?"
 const genAI = process.env.GEMINI_API_KEY
   ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
+const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || "gemini-2.5-pro";
+const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || "gemini-2.5-flash";
+const GEMINI_MODEL_SUMMARY = process.env.GEMINI_MODEL_SUMMARY || GEMINI_MODEL_FLASH;
+const GEMINI_QUEUE_DELAY_MS = parseInt(process.env.GEMINI_QUEUE_DELAY_MS, 10) || 35000;
+const GEMINI_QUEUE_MAX_SIZE = parseInt(process.env.GEMINI_QUEUE_MAX_SIZE, 10) || 10;
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -529,7 +534,7 @@ Return ONLY a valid raw JSON object with no markdown, no code blocks, no explana
 
   const userMessage = `Here are all of ${student.name}'s answers:\n\n${readableAnswers}`;
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_PRO });
 
   const result = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: userMessage }] }],
@@ -538,7 +543,7 @@ Return ONLY a valid raw JSON object with no markdown, no code blocks, no explana
 
   const raw = result.response.text().trim().replace(/^```json|^```|```$/g, "").trim();
 
-  console.log("\n========== GEMINI 2.5 PRO RESPONSE ==========");
+  console.log(`\n========== ${GEMINI_MODEL_PRO} RESPONSE ==========`);
   console.log(raw);
   console.log("==============================================\n");
 
@@ -547,7 +552,7 @@ Return ONLY a valid raw JSON object with no markdown, no code blocks, no explana
     parsed = JSON.parse(raw);
   } catch (err) {
     console.error("Failed to parse Gemini 2.5 Pro response:", err.message);
-    throw new Error("Gemini 2.5 Pro returned invalid JSON. Check the logs above.");
+    throw new Error(`${GEMINI_MODEL_PRO} returned invalid JSON. Check the logs above.`);
   }
 
   // Clamp all numeric values to be safe
@@ -577,7 +582,7 @@ async function checkAiRisk(jobTitle) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODEL_FLASH,
       tools: [{ googleSearch: {} }],
     });
 
@@ -675,11 +680,11 @@ async function generateResultForUser(userId) {
   console.log(`Education level detected: ${educationLevel}`);
   console.log(`Total answers collected: ${latestResponse.answers.length}`);
 
-  // Step 2 — Gemini 2.5 Pro scores everything
+  // Step 2 — configured Gemini Pro model scores everything
   const scored = await scoreWithGeminiPro(student, readableAnswers, educationLevel);
 
-  // Step 3 — Gemini 2.5 Flash + Search Grounding for each job role
-  console.log("\nChecking AI risk for job roles via Gemini 2.5 Flash + Search Grounding...");
+  // Step 3 — configured Gemini Flash model + Search Grounding for each job role
+  console.log(`\nChecking AI risk for job roles via ${GEMINI_MODEL_FLASH} + Search Grounding...`);
   const enrichedCareerFit = await enrichJobRoles(scored.careerFit);
 
   // Step 4 — Build final result document
@@ -738,8 +743,8 @@ async function processQueue() {
   } catch (err) {
     reject(err);
   } finally {
-    // 35s gap to respect 2 RPM Gemini Pro free-tier limit
-    await new Promise((r) => setTimeout(r, 35000));
+    // Delay between jobs to respect the configured Pro rate limit.
+    await new Promise((r) => setTimeout(r, GEMINI_QUEUE_DELAY_MS));
     isProcessing = false;
     processQueue();
   }
@@ -747,6 +752,13 @@ async function processQueue() {
 
 function queuedGenerate(userId) {
   return new Promise((resolve, reject) => {
+    const pendingCount = queue.length + (isProcessing ? 1 : 0);
+    if (pendingCount >= GEMINI_QUEUE_MAX_SIZE) {
+      const error = new Error("Server busy, please try again in a few minutes");
+      error.status = 503;
+      reject(error);
+      return;
+    }
     queue.push({ userId, resolve, reject });
     processQueue();
   });
@@ -757,4 +769,9 @@ module.exports = {
   queuedGenerate,
   queuePositionFor,
   isQueueProcessing,
+  GEMINI_MODEL_PRO,
+  GEMINI_MODEL_FLASH,
+  GEMINI_MODEL_SUMMARY,
+  GEMINI_QUEUE_DELAY_MS,
+  GEMINI_QUEUE_MAX_SIZE,
 };

@@ -17,6 +17,14 @@ export interface SystemHealthCheck {
 export interface SystemHealthReport {
   overall: "healthy" | "degraded";
   checks: SystemHealthCheck[];
+  geminiModelPro?: string;
+  geminiModelFlash?: string;
+  geminiModelSummary?: string;
+  geminiQueueDelayMs?: number;
+  geminiQueueMaxSize?: number;
+  dbAdmin?: string;
+  dbStudents?: string;
+  port?: number;
 }
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
@@ -192,6 +200,14 @@ export const apiClient = {
           { name: "JWT Auth", status: "ok", detail: "Valid · expires in 7d" },
           { name: "Backend API", status: "ok", detail: "Mock mode (no backend)", responseMs: 0 },
         ],
+        geminiModelPro: "gemini-2.5-pro",
+        geminiModelFlash: "gemini-2.5-flash",
+        geminiModelSummary: "gemini-2.5-flash",
+        geminiQueueDelayMs: 2000,
+        geminiQueueMaxSize: 10,
+        dbAdmin: "stepsguidance_admin",
+        dbStudents: "stepsguidance_students",
+        port: 5000,
       };
     }
     return request<SystemHealthReport>("/api/health/full");

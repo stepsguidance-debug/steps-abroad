@@ -3,25 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Steps Guidance — Career Guidance for Studying Abroad</title>
+    <title>%VITE_APP_NAME% — Career Guidance for Studying Abroad</title>
     <meta name="description" content="AI-powered career guidance platform for students planning higher education abroad." />
-    <meta name="author" content="Steps Guidance" />
+    <meta name="author" content="%VITE_APP_NAME%" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet" />
 
-    <meta property="og:title" content="Steps Guidance" />
+    <meta property="og:title" content="%VITE_APP_NAME%" />
     <meta property="og:description" content="AI-powered career guidance for students going abroad." />
     <meta property="og:type" content="website" />
   </head>
   <body>
     <script>
       (function () {
+        var fallbackTheme = '%VITE_DEFAULT_THEME%' || 'dark';
         try {
-          var t = localStorage.getItem('steps_theme') || 'dark';
+          var t = localStorage.getItem('steps_theme') || fallbackTheme;
           document.documentElement.setAttribute('data-theme', t);
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.setAttribute('data-theme', fallbackTheme);
         }
       })();
     </script>

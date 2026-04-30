@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 const bcrypt = require("bcryptjs");
 const { connectDatabases, disconnectDatabases, adminConnection, studentConnection } = require("../db");
 const AdminAccount = require("../models/AdminAccount");

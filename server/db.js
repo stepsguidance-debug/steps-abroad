@@ -7,13 +7,15 @@ function withDatabaseName(baseUri, dbName) {
 }
 
 const baseUri = process.env.MONGODB_URI;
+const adminDbName = process.env.DB_ADMIN || "stepsguidance_admin";
+const studentDbName = process.env.DB_STUDENTS || "stepsguidance_students";
 
 if (!baseUri) {
   throw new Error("MONGODB_URI is required");
 }
 
-const adminUri = withDatabaseName(baseUri, "stepsguidance_admin");
-const studentUri = withDatabaseName(baseUri, "stepsguidance_students");
+const adminUri = withDatabaseName(baseUri, adminDbName);
+const studentUri = withDatabaseName(baseUri, studentDbName);
 
 const adminConnection = mongoose.createConnection(adminUri);
 const studentConnection = mongoose.createConnection(studentUri);
@@ -35,6 +37,8 @@ module.exports = {
   studentConnection,
   adminUri,
   studentUri,
+  adminDbName,
+  studentDbName,
   connectDatabases,
   disconnectDatabases,
 };

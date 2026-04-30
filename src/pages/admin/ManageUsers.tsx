@@ -19,28 +19,54 @@ const ManageUsers = () => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [toDelete, setToDelete] = useState<Student | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = () => apiClient.getStudents().then(setStudents);
   useEffect(() => { refresh(); }, []);
 
-  const handleAdd = async () => {
+  const handleAdd = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!form.name || !form.email || !form.password) {
       toast({ title: "Please fill all fields", variant: "destructive" });
       return;
     }
-    await apiClient.addStudent(form);
-    toast({ title: "Student added" });
-    setForm({ name: "", email: "", password: "" });
-    setOpen(false);
-    refresh();
+
+    try {
+      setCreating(true);
+      await apiClient.addStudent(form);
+      await refresh();
+      toast({ title: "Student added" });
+      setForm({ name: "", email: "", password: "" });
+      setOpen(false);
+    } catch (error) {
+      toast({
+        title: "Unable to create student",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const confirmDelete = async () => {
     if (!toDelete) return;
-    await apiClient.deleteStudent(toDelete._id);
-    toast({ title: `${toDelete.name} removed` });
-    setToDelete(null);
-    refresh();
+    try {
+      setDeleting(true);
+      await apiClient.deleteStudent(toDelete._id);
+      await refresh();
+      toast({ title: `${toDelete.name} removed` });
+      setToDelete(null);
+    } catch (error) {
+      toast({
+        title: "Unable to remove student",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -52,19 +78,23 @@ const ManageUsers = () => {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="btn-gold w-full sm:w-auto"><Plus className="h-4 w-4 mr-1" /> Add Student</Button>
+            <Button type="button" className="btn-gold w-full sm:w-auto"><Plus className="h-4 w-4 mr-1" /> Add Student</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add a new student</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-              <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-              <div><Label>Temporary password</Label><Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="btn-gold" onClick={handleAdd}>Create</Button>
-            </DialogFooter>
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div className="space-y-3">
+                <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                <div><Label>Temporary password</Label><Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={creating}>Cancel</Button>
+                <Button type="submit" className="btn-gold" disabled={creating}>
+                  {creating ? "Creating..." : "Create"}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -108,7 +138,9 @@ const ManageUsers = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

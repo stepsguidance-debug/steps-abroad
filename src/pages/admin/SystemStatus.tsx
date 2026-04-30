@@ -92,6 +92,52 @@ const SystemStatus = () => {
       <section className="glass-card p-5">
         <h2 className="font-semibold mb-1">Gemini API Usage Limits (Free Tier)</h2>
         <p className="text-xs text-muted-foreground mb-4">Hard caps from Google. Each student submission uses 1 Gemini 2.5 Pro request + 6 Gemini 2.5 Flash requests (3 primary job roles + 3 secondary job roles).</p>
+        {report && (
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Active Runtime Config</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Pro model</span>
+                  <span className="font-mono">{report.geminiModelPro || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Flash model</span>
+                  <span className="font-mono">{report.geminiModelFlash || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Summary model</span>
+                  <span className="font-mono">{report.geminiModelSummary || "—"}</span>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Server Runtime Config</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Admin DB</span>
+                  <span className="font-mono">{report.dbAdmin || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Students DB</span>
+                  <span className="font-mono">{report.dbStudents || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Queue delay</span>
+                  <span className="font-mono">{report.geminiQueueDelayMs != null ? `${report.geminiQueueDelayMs} ms` : "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Queue max size</span>
+                  <span className="font-mono">{report.geminiQueueMaxSize ?? "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Port</span>
+                  <span className="font-mono">{report.port ?? "—"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {LIMITS.map((m) => (
             <div key={m.model} className="rounded-xl border border-border p-4">
@@ -108,7 +154,7 @@ const SystemStatus = () => {
           ))}
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          Note: At 2 RPM limit for Pro — submissions are processed one at a time with a 35 second delay between concurrent submissions.
+          Note: submissions are processed one at a time with the configured queue delay between concurrent submissions.
         </p>
       </section>
     </div>
