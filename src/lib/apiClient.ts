@@ -143,6 +143,48 @@ export const apiClient = {
     return request<Result>(`/api/results/${userId}`);
   },
 
+  async getDraft(): Promise<{ answers: Array<{ questionId: string; selectedValue: string; selectedLabel: string; customAnswer?: string }> } | null> {
+    if (USING_MOCKS) return null;
+    try {
+      return await request("/api/responses/draft");
+    } catch {
+      return null;
+    }
+  },
+
+  async saveDraft(answers: Array<{ questionId: string; selectedValue: string; selectedLabel: string; customAnswer?: string }>): Promise<void> {
+    if (USING_MOCKS) return;
+    try {
+      await request("/api/responses/draft", { method: "PATCH", body: JSON.stringify({ answers }) });
+    } catch { /* best-effort */ }
+  },
+
+  async getQueueStatus(): Promise<{ position: number; isProcessing: boolean }> {
+    if (USING_MOCKS) return { position: 0, isProcessing: false };
+    try {
+      return await request("/api/results/queue-status");
+    } catch {
+      return { position: 0, isProcessing: false };
+    }
+  },
+
+  async getSystemHealth(): Promise<SystemHealthReport> {
+    if (USING_MOCKS) {
+      return {
+        overall: "healthy",
+        checks: [
+          { name: "MongoDB Admin DB", status: "ok", detail: "stepsguidance_admin", responseMs: 12 },
+          { name: "MongoDB Students DB", status: "ok", detail: "stepsguidance_students", responseMs: 18 },
+          { name: "Gemini 2.5 Pro", status: "ok", detail: "gemini-2.5-pro", responseMs: 540 },
+          { name: "Gemini 2.5 Flash (Search Grounding)", status: "ok", detail: "gemini-2.5-flash", responseMs: 380 },
+          { name: "JWT Auth", status: "ok", detail: "Valid · expires in 7d" },
+          { name: "Backend API", status: "ok", detail: "Mock mode (no backend)", responseMs: 0 },
+        ],
+      };
+    }
+    return request<SystemHealthReport>("/api/health/full");
+  },
+
   saveAuth(token: string, user: User) {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem("sg_user", JSON.stringify(user));
