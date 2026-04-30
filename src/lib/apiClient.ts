@@ -1,4 +1,4 @@
-// Single fetch wrapper. Falls back to in-memory mocks when VITE_API_BASE_URL is not set.
+// Single fetch wrapper. Uses same-origin /api by default; mocks are opt-in.
 import {
   MOCK_ADMIN,
   MOCK_QUESTIONS,
@@ -27,8 +27,8 @@ export interface SystemHealthReport {
   port?: number;
 }
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
-export const USING_MOCKS = !BASE_URL;
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
+export const USING_MOCKS = import.meta.env.VITE_USE_MOCKS === "true";
 
 const TOKEN_KEY = "sg_token";
 
