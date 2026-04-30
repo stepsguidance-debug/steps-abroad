@@ -5,8 +5,9 @@
 /* Steps Guidance — Premium Navy + Gold design system. All colors HSL. */
 
 @layer base {
-  :root {
-    /* Brand */
+  :root,
+  [data-theme="dark"] {
+    /* Brand — Dark (default) */
     --background: 230 67% 13%;            /* deep navy #0B1437 */
     --background-elevated: 227 64% 20%;   /* navy surface #0F2057 */
     --foreground: 0 0% 100%;
@@ -57,6 +58,56 @@
     --sidebar-border: 227 40% 22%;
     --sidebar-ring: 38 91% 55%;
   }
+
+  [data-theme="light"] {
+    --background: 222 60% 97%;            /* #F0F4FF */
+    --background-elevated: 0 0% 100%;
+    --foreground: 230 67% 13%;
+    --muted-text: 215 25% 35%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 230 67% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 67% 13%;
+
+    --primary: 36 92% 43%;                /* darker gold #D4890A */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 38 95% 55%;
+
+    --secondary: 222 40% 92%;
+    --secondary-foreground: 230 67% 13%;
+
+    --muted: 222 30% 94%;
+    --muted-foreground: 215 25% 35%;
+
+    --accent: 36 92% 43%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 35%;
+    --warning: 36 92% 43%;
+
+    --border: 215 30% 82%;                /* #CBD5E0 */
+    --input: 215 30% 88%;
+    --ring: 36 92% 43%;
+
+    --gradient-hero: linear-gradient(135deg, hsl(222 60% 97%) 0%, hsl(0 0% 100%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(36 92% 43%), hsl(38 95% 55%));
+    --shadow-gold: 0 10px 40px -10px hsl(36 92% 43% / 0.3);
+    --shadow-elegant: 0 20px 60px -20px hsl(230 67% 30% / 0.15);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 230 67% 13%;
+    --sidebar-primary: 36 92% 43%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 94%;
+    --sidebar-accent-foreground: 230 67% 13%;
+    --sidebar-border: 215 30% 85%;
+    --sidebar-ring: 36 92% 43%;
+  }
 }
 
 @layer base {
@@ -66,8 +117,8 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-image:
-      radial-gradient(ellipse at top right, hsl(38 91% 55% / 0.08), transparent 50%),
-      radial-gradient(ellipse at bottom left, hsl(227 64% 30% / 0.4), transparent 50%);
+      radial-gradient(ellipse at top right, hsl(var(--primary) / 0.08), transparent 50%),
+      radial-gradient(ellipse at bottom left, hsl(var(--background-elevated) / 0.4), transparent 50%);
     background-attachment: fixed;
     overflow-x: hidden;
   }

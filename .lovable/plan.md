@@ -1,95 +1,97 @@
-# Build the full Steps Guidance app + external `/server` backend
+## Plan — 4 Changes
 
-## What exists today
-- Only `src/pages/Login.tsx` (UI shell, no submit logic)
-- Navy + gold theme tokens in `src/index.css`
-- No Admin pages, no Student questionnaire, no Results page, no `/server` folder, no API client, no auth context
+### Change 1: Save & Resume Assessment
 
-## What I'll build
+**Frontend (`src/pages/Assessment.tsx`)**
+- On every answer change / `next()`, write to `localStorage` under `assessment_progress_${user._id}`:
+  ```json
+  { userId, currentSection, currentQuestionIndex, answers: { [qId]: { selectedValue, selectedLabel } }, savedAt }
+  ```
+- On mount: check localStorage. If exists and `savedAt` < 7 days old → render a top banner:
+  > "You have a saved attempt from [date]. Would you like to continue where you left off?" `[Continue]` `[Start fresh]`
+- Continue → restore `idx`, `answers`, `customAnswers`. Start fresh → delete entry.
+- If localStorage missing, fetch `GET /api/responses/draft` and hydrate from server draft.
+- On every `next()` also call `PATCH /api/responses/draft` (debounced) with current partial answers.
+- On successful submit → delete localStorage entry.
 
-### 1. Frontend foundation
-- `src/lib/apiClient.ts` — fetch wrapper using `import.meta.env.VITE_API_BASE_URL`. If unset, returns realistic **mock data** so every screen works in the Lovable preview without a backend.
-- `src/context/AuthContext.tsx` — JWT in `localStorage`, `login()`, `logout()`, `user`, `role`.
-- `src/components/ProtectedRoute.tsx` — redirects to `/login`, enforces `admin` vs `student` role.
-- `src/lib/mocks.ts` — 1 admin, 6 students (varied statuses), 50 questions (sections A–G), 2 fully generated results.
-- Routes added in `src/App.tsx`.
+**Backend**
+- `server/models/Response.js`: add `isDraft: { type: Boolean, default: false }` and make `answers` allow partial saves (loosen validation when draft).
+- `server/routes/responses.js`:
+  - `PATCH /draft` — upsert `{ userId, isDraft: true, answers }`.
+  - `GET /draft` — return current draft for the logged-in student.
+  - Update existing `POST /submit`: when finalizing, set `isDraft: false`; if a draft exists for the user, overwrite it instead of 409-ing.
+- `apiClient.ts`: add `getDraft()`, `saveDraft(answers)`.
 
-### 2. Login wired up
-- `src/pages/Login.tsx` — submit calls `apiClient.login()`, stores JWT, redirects to `/admin` or `/assessment` based on role. Toast on error.
+---
 
-### 3. Admin area
-- `src/pages/admin/AdminLayout.tsx` — sidebar (Overview / Manage Users / Question Bank / Logout), topbar with admin name.
-- `src/pages/admin/Overview.tsx` — 4 stat cards (Total / Answered / Pending / Avg AI Readiness) + student grid (gold avatar, status badge, readiness score). Click → result.
-- `src/pages/admin/ManageUsers.tsx` — table + "Add Student" modal (name/email/password) + delete confirm dialog.
-- `src/pages/admin/QuestionBank.tsx` — 7 accordions A–G with count badges, read-only question cards.
-- `src/pages/admin/StudentResult.tsx` — reuses the Result dashboard for any selected student.
+### Change 2: Student Name + Avatar in Header
 
-### 4. Student area
-- `src/pages/Assessment.tsx` — gold progress bar, section badge, MCQ / forced-choice / 1–5 scale renderers, prev/next, "Analysing your profile with AI…" overlay on submit, then redirect to `/results`.
-- `src/pages/Results.tsx` — AI Readiness hero badge (green/amber/red), 4 trait cards, Recharts donut, section scores table with bars + Strong/Moderate/Weak pills, Primary (gold border) + Secondary (silver border) career cards with degrees, 3 job roles each, AI risk pills (🟢🟡🔴 + tooltip), red-bordered contradiction cards, italic gold-bordered AI summary.
+- New shared component `src/components/UserBadge.tsx`:
+  - Avatar circle (gold initials on dark navy bg). Initials = first letter of first + last name; if single name → first 2 letters.
+  - Renders `name` + `[Logout]` button.
+- Use in:
+  - `src/pages/Assessment.tsx` header (replaces "Save & exit" link area).
+  - `src/pages/Results.tsx` header.
+  - `src/pages/admin/AdminLayout.tsx` top header — show "Admin" with shield icon + initials.
+- Pulls `user.name` from `useAuth()` (already in context). No backend change needed.
 
-### 5. `/server` reference backend (committed to repo, you deploy it)
-```text
-server/
-  package.json
-  .env.example         MONGODB_URI, JWT_SECRET, GEMINI_API_KEY, PORT, CLIENT_ORIGIN
-  index.js             Express + CORS + JWT middleware
-  models/
-    User.js            name, email, passwordHash, role, status
-    Question.js        section, sectionTitle, text, type, options, order
-    Response.js        userId, answers[], submittedAt
-    Result.js          traitScores, behaviourProfile, aiReadinessIndex,
-                       contradictionFlags, sectionScores, careerFit, aiSummary
-  middleware/auth.js   verifyJWT, requireAdmin
-  routes/
-    auth.js            POST /api/auth/login
-    admin.js           GET/POST/DELETE /api/admin/users
-    questions.js       GET /api/questions
-    responses.js       POST /api/responses/submit  (triggers Gemini analysis)
-    results.js         GET /api/results/:userId
-  services/gemini.js   analyzeProfile() → Gemini 2.5 Pro structured output
-                       checkAiRisk(role) → Gemini 2.5 Flash w/ search grounding
-                       Promise.all over career roles
-  scripts/seed.js      seeds admin@stepsguidance.com / Admin123! + 50 questions
-  README.md            local + Render deploy steps
-```
+---
 
-Scoring rubric in `services/gemini.js`: 40% behavioural / 30% performance / 20% consistency / 10% self-perception. Traits as %, section scores 0–100 (Strong ≥75 / Moderate 50–74 / Weak <50), career mapping (Primary ≥80, Secondary 60–80), contradiction detection, AI Readiness Index 0–100.
+### Change 3: Dark / Light Theme Toggle
 
-### 6. README updates — running locally
-A new `RUN_LOCALLY.md` at the repo root with exact commands:
+- `index.html`: add inline pre-React script that reads `localStorage.steps_theme` (default `dark`) and sets `data-theme` on `<html>`.
+- `src/index.css`: convert the `:root` block into `[data-theme="dark"] { ... }` (keeping existing HSL tokens) and add a parallel `[data-theme="light"] { ... }` block with light navy/cream tokens that map to the same token names (`--background`, `--foreground`, `--card`, `--border`, `--primary`, etc.) so all existing Tailwind classes auto-switch.
+- New `src/hooks/useTheme.ts`: read/write `steps_theme`, toggle `data-theme` attribute.
+- New `src/components/ThemeToggle.tsx`: sun/moon button (lucide `Sun`/`Moon`), placed inside `UserBadge` (so it appears next to name on every page).
 
-**Frontend (this repo):**
-```bash
-git clone <your-repo-url>
-cd <repo>
-npm install
-# optional: create .env with VITE_API_BASE_URL=http://localhost:5000
-npm run dev          # http://localhost:8080
-```
+---
 
-**Backend (the /server folder):**
-```bash
-cd server
-npm install
-cp .env.example .env
-# edit .env: MONGODB_URI=<your real Atlas URI>
-#           GEMINI_API_KEY=<your real key>
-#           JWT_SECRET=<any long random string>
-#           CLIENT_ORIGIN=http://localhost:8080
-node scripts/seed.js   # one time: creates admin + 50 questions
-npm run dev            # nodemon on http://localhost:5000
-```
+### Change 4: Admin System Status + Gemini Rate-Limit Queue
 
-Then log in at `http://localhost:8080/login` with `admin@stepsguidance.com` / `Admin123!`.
+**New admin page** `src/pages/admin/SystemStatus.tsx` at route `/admin/system`:
+- Sidebar nav entry with pulsing dot (green = all healthy, red = any failing).
+- On load, calls `GET /api/health/full` and renders rows for: Mongo Admin DB, Mongo Students DB, Gemini 2.5 Pro, Gemini 2.5 Flash (search grounding), JWT Auth, Backend API. Each row shows status, response time ms, extra detail (model name / token expiry / uptime).
+- Static "Gemini API Usage Limits (Free Tier)" panel listing the RPM/RPD/TPM table from the spec + the explanatory note about 1 Pro + 6 Flash per submission.
 
-## Why you can't see admin/student now
-Those pages have not been generated yet. After this plan is approved I'll create every file listed above so all screens are visible in the Lovable preview (using mock data), and the `/server` folder will be ready for you to copy out, plug your real Mongo URI + Gemini key into, and run locally or deploy.
+**Backend new endpoints**
+- `GET /api/health` → `{ status: "ok", uptime: process.uptime() }` (public).
+- `GET /api/health/full` (admin JWT) → runs all 6 checks in parallel with timing:
+  - Admin DB: `AdminAccount.countDocuments()`
+  - Students DB: `Result.countDocuments()`
+  - Gemini Pro: minimal `"Reply with the word OK only"` prompt
+  - Gemini Flash with `tools: [{ googleSearch: {} }]`
+  - JWT: decode caller's token, return expiry
+  - API: returns own uptime
+- `GET /api/results/queue-status` → `{ position, isProcessing }` for the calling user.
 
-## Assumptions (tell me if any are wrong)
-- 50 questions: I generate a coherent default set across A–G. You can edit `server/scripts/seed.js` anytime.
-- Scale questions render as 1–5 radio rows.
-- Mock mode auto-toggles when `VITE_API_BASE_URL` is empty — no manual switch.
-- Server uses Express + Mongoose + jsonwebtoken + bcryptjs + @google/generative-ai.
+**Queue in `server/services/resultService.js`**
+- Add the in-memory FIFO queue exactly as specified: `queuedGenerate(userId)`, 35s gap between jobs, single concurrency.
+- Track per-user position so `queue-status` can answer.
+- Update `server/routes/responses.js` and `server/routes/results.js` to call `queuedGenerate` instead of `generateResultForUser` directly.
 
-Approve and I'll build all of it in one pass.
+**Frontend wait UX (`Assessment.tsx` submit overlay)**
+- Replace current overlay with: "Analysing your profile with AI… This may take up to 60 seconds." + spinner.
+- After submit, poll `GET /api/results/queue-status` every 5s; if `position > 0` show "You are number X in the queue. Please wait…". When result returns from submit promise, navigate to `/results`.
+
+---
+
+### Files to be created
+- `src/components/UserBadge.tsx`, `src/components/ThemeToggle.tsx`
+- `src/hooks/useTheme.ts`
+- `src/pages/admin/SystemStatus.tsx`
+- `server/routes/health.js`
+
+### Files to be edited
+- `src/App.tsx` (add `/admin/system` route)
+- `src/pages/Assessment.tsx`, `src/pages/Results.tsx`, `src/pages/admin/AdminLayout.tsx`
+- `src/lib/apiClient.ts`, `src/lib/types.ts`
+- `src/index.css`, `index.html`
+- `server/index.js` (mount health route)
+- `server/models/Response.js` (add `isDraft`)
+- `server/routes/responses.js`, `server/routes/results.js`
+- `server/services/resultService.js` (queue)
+
+### Notes / assumptions
+- Mock mode (`USING_MOCKS`) will simulate draft save/load and queue-status with no-op + `position: 0` so the preview keeps working without the backend.
+- Light theme will reuse existing token names so no component-level color rewrites are required; only `index.css` changes.
+- Queue is in-process memory only — restarting the Node server clears it (acceptable for current scope).

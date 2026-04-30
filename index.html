@@ -15,6 +15,16 @@
     <meta property="og:type" content="website" />
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('steps_theme') || 'dark';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -7,6 +7,18 @@ import {
 } from "./mocks";
 import type { AuthResponse, NewQuestionInput, Question, Result, Student, User } from "./types";
 
+export interface SystemHealthCheck {
+  name: string;
+  status: "ok" | "fail";
+  detail?: string;
+  responseMs?: number;
+  error?: string;
+}
+export interface SystemHealthReport {
+  overall: "healthy" | "degraded";
+  checks: SystemHealthCheck[];
+}
+
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
 export const USING_MOCKS = !BASE_URL;
 
@@ -98,7 +110,7 @@ export const apiClient = {
 
   async addQuestion(input: NewQuestionInput): Promise<Question> {
     if (USING_MOCKS) {
-      const created: Question = { _id: `q-${Date.now()}`, order: MOCK_QUESTIONS.length + 1, ...input };
+      const created: Question = { _id: `q-${Date.now()}`, order: MOCK_QUESTIONS.length + 1, sectionTitle: input.section, ...input };
       (MOCK_QUESTIONS as Question[]).push(created);
       return created;
     }
@@ -141,6 +153,48 @@ export const apiClient = {
   async getResult(userId: string): Promise<Result | null> {
     if (USING_MOCKS) return mockResults[userId] ?? null;
     return request<Result>(`/api/results/${userId}`);
+  },
+
+  async getDraft(): Promise<{ answers: Array<{ questionId: string; selectedValue: string; selectedLabel: string; customAnswer?: string }> } | null> {
+    if (USING_MOCKS) return null;
+    try {
+      return await request("/api/responses/draft");
+    } catch {
+      return null;
+    }
+  },
+
+  async saveDraft(answers: Array<{ questionId: string; selectedValue: string; selectedLabel: string; customAnswer?: string }>): Promise<void> {
+    if (USING_MOCKS) return;
+    try {
+      await request("/api/responses/draft", { method: "PATCH", body: JSON.stringify({ answers }) });
+    } catch { /* best-effort */ }
+  },
+
+  async getQueueStatus(): Promise<{ position: number; isProcessing: boolean }> {
+    if (USING_MOCKS) return { position: 0, isProcessing: false };
+    try {
+      return await request("/api/results/queue-status");
+    } catch {
+      return { position: 0, isProcessing: false };
+    }
+  },
+
+  async getSystemHealth(): Promise<SystemHealthReport> {
+    if (USING_MOCKS) {
+      return {
+        overall: "healthy",
+        checks: [
+          { name: "MongoDB Admin DB", status: "ok", detail: "stepsguidance_admin", responseMs: 12 },
+          { name: "MongoDB Students DB", status: "ok", detail: "stepsguidance_students", responseMs: 18 },
+          { name: "Gemini 2.5 Pro", status: "ok", detail: "gemini-2.5-pro", responseMs: 540 },
+          { name: "Gemini 2.5 Flash (Search Grounding)", status: "ok", detail: "gemini-2.5-flash", responseMs: 380 },
+          { name: "JWT Auth", status: "ok", detail: "Valid · expires in 7d" },
+          { name: "Backend API", status: "ok", detail: "Mock mode (no backend)", responseMs: 0 },
+        ],
+      };
+    }
+    return request<SystemHealthReport>("/api/health/full");
   },
 
   saveAuth(token: string, user: User) {

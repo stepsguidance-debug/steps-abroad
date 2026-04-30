@@ -8,6 +8,7 @@ const adminRoutes = require("./routes/admin");
 const questionRoutes = require("./routes/questions");
 const responseRoutes = require("./routes/responses");
 const resultRoutes = require("./routes/results");
+const healthRoutes = require("./routes/health");
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/questions", questionRoutes);
 app.use("/api/responses", responseRoutes);
 app.use("/api/results", resultRoutes);
+app.use("/api/health", healthRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

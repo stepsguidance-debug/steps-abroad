@@ -1,27 +1,97 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, GraduationCap, RefreshCw } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { toast } from "@/hooks/use-toast";
 import type { Question } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import UserBadge from "@/components/UserBadge";
+
+interface SavedProgress {
+  userId: string;
+  currentSection: string;
+  currentQuestionIndex: number;
+  answers: Record<string, { selectedValue: string; selectedLabel: string; customAnswer?: string }>;
+  savedAt: string;
+}
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const Assessment = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const storageKey = user ? `assessment_progress_${user._id}` : "";
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [resumeOffer, setResumeOffer] = useState<SavedProgress | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [queueStatus, setQueueStatus] = useState<{ position: number; isProcessing: boolean } | null>(null);
+
+  const labelByValue = useRef<Map<string, Map<string, string>>>(new Map());
 
   useEffect(() => {
     if (user?.role === "student" && user.status === "answered") {
       navigate("/results", { replace: true });
       return;
     }
-    apiClient.getQuestions().then(setQuestions);
+    apiClient.getQuestions().then((qs) => {
+      setQuestions(qs);
+      const map = new Map<string, Map<string, string>>();
+      qs.forEach((q) => {
+        const m = new Map<string, string>();
+        q.choices.forEach((c) => m.set(c.value, c.label));
+        map.set(q._id, m);
+      });
+      labelByValue.current = map;
+    });
   }, [navigate, user]);
+
+  // Hydrate from localStorage / server draft once questions are loaded
+  useEffect(() => {
+    if (!user || !questions.length || hydrated) return;
+    let saved: SavedProgress | null = null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as SavedProgress;
+        const age = Date.now() - new Date(parsed.savedAt).getTime();
+        if (age < SEVEN_DAYS_MS && parsed.userId === user._id) {
+          saved = parsed;
+        } else {
+          localStorage.removeItem(storageKey);
+        }
+      }
+    } catch {
+      localStorage.removeItem(storageKey);
+    }
+
+    if (saved) {
+      setResumeOffer(saved);
+      setHydrated(true);
+      return;
+    }
+
+    // Try server draft
+    apiClient.getDraft().then((draft) => {
+      if (draft?.answers?.length) {
+        const ans: Record<string, string> = {};
+        const custom: Record<string, string> = {};
+        draft.answers.forEach((a) => {
+          ans[a.questionId] = a.selectedValue;
+          if (a.customAnswer) custom[a.questionId] = a.customAnswer;
+        });
+        setAnswers(ans);
+        setCustomAnswers(custom);
+        const lastIdx = Math.min(draft.answers.length, questions.length - 1);
+        setIdx(lastIdx);
+      }
+      setHydrated(true);
+    }).catch(() => setHydrated(true));
+  }, [user, questions, hydrated, storageKey]);
 
   const total = questions.length;
   const q = questions[idx];
@@ -31,12 +101,44 @@ const Assessment = () => {
     [questions, idx],
   );
 
-  const setAnswer = (value: string) => {
-    if (!q) return;
-    setAnswers((prev) => ({ ...prev, [q._id]: value }));
+  const persistProgress = (
+    nextAnswers: Record<string, string>,
+    nextCustom: Record<string, string>,
+    nextIdx: number,
+  ) => {
+    if (!user || !storageKey) return;
+    const answersMap: SavedProgress["answers"] = {};
+    Object.entries(nextAnswers).forEach(([qid, value]) => {
+      const label = labelByValue.current.get(qid)?.get(value) || value;
+      answersMap[qid] = { selectedValue: value, selectedLabel: label, customAnswer: nextCustom[qid] };
+    });
+    const payload: SavedProgress = {
+      userId: user._id,
+      currentSection: questions[nextIdx]?.section || "A",
+      currentQuestionIndex: nextIdx,
+      answers: answersMap,
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch { /* quota */ }
   };
 
-  const next = () => {
+  const setAnswer = (value: string) => {
+    if (!q) return;
+    const next = { ...answers, [q._id]: value };
+    setAnswers(next);
+    persistProgress(next, customAnswers, idx);
+  };
+
+  const setCustomAnswer = (value: string) => {
+    if (!q) return;
+    const next = { ...customAnswers, [q._id]: value };
+    setCustomAnswers(next);
+    persistProgress(answers, next, idx);
+  };
+
+  const next = async () => {
     if (!q || answers[q._id] === undefined) {
       toast({ title: "Please answer to continue", variant: "destructive" });
       return;
@@ -46,12 +148,35 @@ const Assessment = () => {
       toast({ title: "Please type your own answer to continue", variant: "destructive" });
       return;
     }
-    if (idx < total - 1) setIdx(idx + 1);
-    else void submit();
+
+    // Best-effort backend draft
+    const draftPayload = Object.entries(answers).map(([questionId, value]) => ({
+      questionId,
+      selectedValue: value,
+      selectedLabel: labelByValue.current.get(questionId)?.get(value) || value,
+      customAnswer: customAnswers[questionId]?.trim() || undefined,
+    }));
+    void apiClient.saveDraft(draftPayload);
+
+    if (idx < total - 1) {
+      const nextIdx = idx + 1;
+      setIdx(nextIdx);
+      persistProgress(answers, customAnswers, nextIdx);
+    } else {
+      void submit();
+    }
   };
 
   const submit = async () => {
     setSubmitting(true);
+    setQueueStatus({ position: 0, isProcessing: true });
+    let pollHandle: number | undefined;
+    if (!apiClient.usingMocks) {
+      pollHandle = window.setInterval(async () => {
+        const status = await apiClient.getQueueStatus();
+        setQueueStatus(status);
+      }, 5000);
+    }
     try {
       const payload = Object.entries(answers).map(([questionId, value]) => ({
         questionId,
@@ -59,12 +184,37 @@ const Assessment = () => {
         customAnswer: customAnswers[questionId]?.trim() || undefined,
       }));
       await apiClient.submitResponses(payload);
+      // Clear local + server draft on success
+      try { localStorage.removeItem(storageKey); } catch {}
       navigate("/results", { replace: true });
     } catch (error) {
       toast({ title: "Submission failed", description: error instanceof Error ? error.message : "", variant: "destructive" });
     } finally {
+      if (pollHandle) window.clearInterval(pollHandle);
       setSubmitting(false);
     }
+  };
+
+  const continueResume = () => {
+    if (!resumeOffer) return;
+    const restoredAnswers: Record<string, string> = {};
+    const restoredCustom: Record<string, string> = {};
+    Object.entries(resumeOffer.answers).forEach(([qid, a]) => {
+      restoredAnswers[qid] = a.selectedValue;
+      if (a.customAnswer) restoredCustom[qid] = a.customAnswer;
+    });
+    setAnswers(restoredAnswers);
+    setCustomAnswers(restoredCustom);
+    setIdx(Math.min(resumeOffer.currentQuestionIndex, Math.max(0, questions.length - 1)));
+    setResumeOffer(null);
+  };
+
+  const startFresh = () => {
+    try { localStorage.removeItem(storageKey); } catch {}
+    setAnswers({});
+    setCustomAnswers({});
+    setIdx(0);
+    setResumeOffer(null);
   };
 
   if (!q) {
@@ -78,25 +228,53 @@ const Assessment = () => {
   return (
     <div className="min-h-screen px-4 py-10">
       {submitting && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center px-4 text-center">
           <div className="h-16 w-16 rounded-full btn-gold flex items-center justify-center animate-pulse">
             <Sparkles className="h-7 w-7" />
           </div>
           <p className="mt-5 text-lg font-semibold">Analysing your profile with AI…</p>
-          <p className="text-sm text-muted-foreground mt-1">This usually takes 10–20 seconds.</p>
+          <p className="text-sm text-muted-foreground mt-1">This may take up to 60 seconds.</p>
+          {queueStatus && queueStatus.position > 0 && (
+            <p className="text-sm text-primary mt-3">
+              You are number {queueStatus.position} in the queue. Please wait…
+            </p>
+          )}
         </div>
       )}
 
       <div className="max-w-3xl mx-auto w-full">
         <header className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Steps Guidance · Diagnostic</p>
-            <h1 className="text-2xl font-bold">Career Discovery Assessment</h1>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-xl btn-gold flex items-center justify-center shrink-0">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Steps Guidance · Diagnostic</p>
+              <h1 className="text-xl sm:text-2xl font-bold truncate">Career Discovery Assessment</h1>
+            </div>
           </div>
-          <button onClick={() => { logout(); navigate("/login"); }} className="text-xs text-muted-foreground hover:text-foreground">
-            Save & exit
-          </button>
+          <UserBadge />
         </header>
+
+        {resumeOffer && (
+          <div className="glass-card p-4 sm:p-5 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm">
+              <p className="font-semibold">Resume your previous attempt</p>
+              <p className="text-muted-foreground">
+                You have a saved attempt from {new Date(resumeOffer.savedAt).toLocaleString()}. Would you like to continue where you left off?
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={continueResume} className="btn-gold inline-flex items-center gap-1 px-4 py-2 text-sm">
+                Continue
+              </button>
+              <button onClick={startFresh}
+                className="inline-flex items-center gap-1 rounded-xl border border-border px-4 py-2 text-sm hover:bg-secondary/50">
+                <RefreshCw className="h-3.5 w-3.5" /> Start fresh
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="glass-card p-3 mb-6">
           <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
@@ -131,7 +309,7 @@ const Assessment = () => {
                     <input
                       type="text"
                       value={customAnswers[q._id] || ""}
-                      onChange={(e) => setCustomAnswers((prev) => ({ ...prev, [q._id]: e.target.value }))}
+                      onChange={(e) => setCustomAnswer(e.target.value)}
                       placeholder={choice.customInputPlaceholder || "Type your answer"}
                       className="w-full rounded-xl border border-border bg-background/40 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition"
                     />

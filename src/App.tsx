@@ -14,6 +14,7 @@ import Overview from "./pages/admin/Overview.tsx";
 import ManageUsers from "./pages/admin/ManageUsers.tsx";
 import QuestionBank from "./pages/admin/QuestionBank.tsx";
 import StudentResult from "./pages/admin/StudentResult.tsx";
+import SystemStatus from "./pages/admin/SystemStatus.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="users" element={<ManageUsers />} />
               <Route path="questions" element={<QuestionBank />} />
               <Route path="results/:userId" element={<StudentResult />} />
+              <Route path="system" element={<SystemStatus />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
