@@ -54,7 +54,9 @@ export type AiRisk = "safe" | "at-risk" | "high-risk";
 export interface CareerJobRole {
   title: string;
   aiRisk: AiRisk;
-  advice: string;
+  riskLabel: "AI-resilient" | "Watch closely" | "High AI risk";
+  whatAiIsDoing: string;
+  whatStudentShouldDo: string;
 }
 
 export interface CareerFitItem {
@@ -63,6 +65,12 @@ export interface CareerFitItem {
   ugDegrees: string[];
   pgDegrees: string[];
   jobRoles: CareerJobRole[];
+}
+
+export interface RejectedCareer {
+  career: string;
+  matchPercent: number;
+  reason: string;
 }
 
 export interface SectionScore {
@@ -86,7 +94,7 @@ export interface Result {
   behaviourProfile: BehaviourProfile;
   sectionScores: SectionScore[];
   contradictionFlags: string[];
-  careerFit: { primary: CareerFitItem; secondary: CareerFitItem; rejected: string[] };
+  careerFit: { primary: CareerFitItem; secondary: CareerFitItem; rejected: RejectedCareer[] };
   aiSuggestionSummary: string;
   generatedAt: string;
 }

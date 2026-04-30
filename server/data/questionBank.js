@@ -427,6 +427,17 @@ const QUESTIONS = [
 
   {
     section: "G", layer: "L3", type: "mcq",
+    questionText: "What is your highest completed qualification?",
+    choices: [
+      c("10th Grade / O-Level / HLCS", "pre_ug", 4, 4, 4, 4, 4),
+      c("12th Grade / A-Level / Diploma", "pre_ug", 5, 5, 5, 4, 5),
+      c("Polytechnic / Foundation Course", "pre_ug", 6, 5, 6, 4, 5),
+      c("Bachelor's Degree (UG completed)", "ug_complete", 6, 5, 5, 4, 6),
+      c("Master's Degree (PG completed)", "pg_complete", 6, 5, 5, 4, 7),
+    ],
+  },
+  {
+    section: "G", layer: "L3", type: "mcq",
     questionText: "What is your current academic score range?",
     choices: [
       c("Above 85%", "above_85", 8, 5, 6, 4, 6),

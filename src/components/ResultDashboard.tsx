@@ -1,6 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AiRisk, CareerFitItem, Result } from "@/lib/types";
+import type { AiRisk, CareerFitItem, RejectedCareer, Result } from "@/lib/types";
 
 const SECTION_TITLES: Record<string, string> = {
   A: "Academic & Cognitive Signals",
@@ -18,7 +18,7 @@ const RISK_META: Record<AiRisk, { dot: string; label: string; ring: string }> = 
   "high-risk": { dot: "bg-destructive", label: "High AI risk", ring: "border-destructive/40" },
 };
 
-const RiskPill = ({ risk, advice }: { risk: AiRisk; advice: string }) => {
+const RiskPill = ({ risk, label, detail }: { risk: AiRisk; label: string; detail: string }) => {
   const meta = RISK_META[risk];
   return (
     <TooltipProvider>
@@ -26,10 +26,10 @@ const RiskPill = ({ risk, advice }: { risk: AiRisk; advice: string }) => {
         <TooltipTrigger asChild>
           <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${meta.ring} cursor-help`}>
             <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-            {meta.label}
+            {label || meta.label}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-xs">{advice}</TooltipContent>
+        <TooltipContent className="max-w-xs">{detail}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -45,32 +45,54 @@ const CareerCard = ({ item, tier }: { item: CareerFitItem; tier: "primary" | "se
         <h4 className="text-lg font-bold mt-1">{item.career}</h4>
         <p className="text-xs text-muted-foreground mt-1">{item.matchPercent}% match</p>
       </div>
-      {item.jobRoles[0] ? <RiskPill risk={item.jobRoles[0].aiRisk} advice={item.jobRoles[0].advice} /> : null}
+      {item.jobRoles[0] ? <RiskPill risk={item.jobRoles[0].aiRisk} label={item.jobRoles[0].riskLabel} detail={item.jobRoles[0].whatAiIsDoing} /> : null}
     </div>
-    <div className="mt-4 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-      <div className="rounded-lg bg-secondary/40 p-2.5">
-        <p className="text-muted-foreground">Undergraduate</p>
-        <p className="font-medium">{item.ugDegrees.join(", ")}</p>
+    {(item.ugDegrees.length > 0 || item.pgDegrees.length > 0) && (
+      <div className="mt-4 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+        {item.ugDegrees.length > 0 && (
+          <div className="rounded-lg bg-secondary/40 p-2.5">
+            <p className="text-muted-foreground">Undergraduate</p>
+            <p className="font-medium">{item.ugDegrees.join(", ")}</p>
+          </div>
+        )}
+        {item.pgDegrees.length > 0 && (
+          <div className="rounded-lg bg-secondary/40 p-2.5">
+            <p className="text-muted-foreground">Postgraduate</p>
+            <p className="font-medium">{item.pgDegrees.join(", ")}</p>
+          </div>
+        )}
       </div>
-      <div className="rounded-lg bg-secondary/40 p-2.5">
-        <p className="text-muted-foreground">Postgraduate</p>
-        <p className="font-medium">{item.pgDegrees.join(", ")}</p>
-      </div>
-    </div>
+    )}
     <div className="mt-3">
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Sample roles</p>
-      <ul className="text-xs space-y-2">
+      <ul className="text-xs space-y-3">
         {item.jobRoles.map((role) => (
-          <li key={role.title} className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="h-1 w-1 mt-1.5 rounded-full bg-primary" />
-              {role.title}
-            </span>
-            <RiskPill risk={role.aiRisk} advice={role.advice} />
+          <li key={role.title} className="rounded-lg bg-secondary/20 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <span className="flex min-w-0 items-center gap-2 font-medium">
+                <span className="h-1 w-1 mt-1.5 rounded-full bg-primary" />
+                {role.title}
+              </span>
+              <RiskPill risk={role.aiRisk} label={role.riskLabel} detail={role.whatAiIsDoing} />
+            </div>
+            <p className="mt-2 text-muted-foreground">
+              <span className="font-medium text-foreground/80">What AI is doing:</span> {role.whatAiIsDoing}
+            </p>
+            <p className="mt-1 text-success">
+              <span className="font-medium">What you should do:</span> {role.whatStudentShouldDo}
+            </p>
           </li>
         ))}
       </ul>
     </div>
+  </div>
+);
+
+const RejectedCareerCard = ({ item }: { item: RejectedCareer }) => (
+  <div className="glass-card border-l-4 border-l-destructive p-4">
+    <p className="text-lg font-bold">{item.career}</p>
+    <p className="mt-1 text-sm font-semibold text-destructive">{item.matchPercent}% match</p>
+    <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
   </div>
 );
 
@@ -170,7 +192,9 @@ const ResultDashboard = ({ result }: Props) => {
       {result.careerFit.rejected.length > 0 && (
         <section>
           <h3 className="text-lg font-bold mb-3">Lower-fit paths for now</h3>
-          <div className="glass-card p-4 text-sm text-muted-foreground">{result.careerFit.rejected.join(", ")}</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {result.careerFit.rejected.map((item) => <RejectedCareerCard key={item.career} item={item} />)}
+          </div>
         </section>
       )}
 

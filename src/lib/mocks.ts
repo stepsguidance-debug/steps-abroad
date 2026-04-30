@@ -99,8 +99,20 @@ const buildResult = (userId: string, userName: string, readiness: number): Resul
       ugDegrees: ["BSc Computer Science", "BBA"],
       pgDegrees: ["MSc Product Management"],
       jobRoles: [
-        { title: "AI Product Manager", aiRisk: "safe", advice: "Human judgement and cross-team decision making stay valuable." },
-        { title: "Solutions Architect", aiRisk: "at-risk", advice: "Pair systems thinking with strong client discovery." },
+        {
+          title: "AI Product Manager",
+          aiRisk: "safe",
+          riskLabel: "AI-resilient",
+          whatAiIsDoing: "AI copilots help with synthesis and roadmap drafts, but they do not replace product judgement or stakeholder alignment.",
+          whatStudentShouldDo: "Build strong product thinking, customer discovery, and AI workflow fluency.",
+        },
+        {
+          title: "Solutions Architect",
+          aiRisk: "at-risk",
+          riskLabel: "Watch closely",
+          whatAiIsDoing: "AI is automating parts of solution design, documentation, and reference architecture generation.",
+          whatStudentShouldDo: "Strengthen client discovery, systems trade-off thinking, and integration skills.",
+        },
       ],
     },
     secondary: {
@@ -109,10 +121,32 @@ const buildResult = (userId: string, userName: string, readiness: number): Resul
       ugDegrees: ["BA Psychology", "BDes UX Design"],
       pgDegrees: ["MSc Human Computer Interaction"],
       jobRoles: [
-        { title: "UX Researcher", aiRisk: "safe", advice: "Interpretation and human context remain durable strengths." },
+        {
+          title: "UX Researcher",
+          aiRisk: "safe",
+          riskLabel: "AI-resilient",
+          whatAiIsDoing: "AI can summarize interview notes and generate draft insights, but it cannot fully replace human interpretation of context.",
+          whatStudentShouldDo: "Invest in qualitative research, synthesis, and experimentation design.",
+        },
       ],
     },
-    rejected: ["Purely repetitive back-office operations"],
+    rejected: [
+      {
+        career: "Purely repetitive back-office operations",
+        matchPercent: 28,
+        reason: "The profile leans toward roles with more judgement and adaptability than repetitive process work.",
+      },
+      {
+        career: "Routine data entry",
+        matchPercent: 24,
+        reason: "The student shows stronger long-term fit for analytical growth paths than low-complexity clerical tasks.",
+      },
+      {
+        career: "Highly isolated archival work",
+        matchPercent: 32,
+        reason: "The current profile benefits more from dynamic environments than narrow, low-variation workflows.",
+      },
+    ],
   },
   aiSuggestionSummary: readiness >= 75
     ? "You combine sharp analysis with enough adaptability to thrive in fast-changing, AI-enabled roles. Keep validating your fit through real projects and degree choices that preserve optionality."

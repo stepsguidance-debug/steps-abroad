@@ -4,7 +4,9 @@ const { studentConnection } = require("../db");
 const CareerRoleSchema = new mongoose.Schema({
   title: { type: String, required: true },
   aiRisk: { type: String, required: true, enum: ["safe", "at-risk", "high-risk"] },
-  advice: { type: String, required: true },
+  riskLabel: { type: String, required: true },
+  whatAiIsDoing: { type: String, required: true },
+  whatStudentShouldDo: { type: String, required: true },
 }, { _id: false });
 
 const CareerFitEntrySchema = new mongoose.Schema({
@@ -13,6 +15,12 @@ const CareerFitEntrySchema = new mongoose.Schema({
   ugDegrees: { type: [String], default: [] },
   pgDegrees: { type: [String], default: [] },
   jobRoles: { type: [CareerRoleSchema], default: [] },
+}, { _id: false });
+
+const RejectedCareerSchema = new mongoose.Schema({
+  career: { type: String, required: true },
+  matchPercent: { type: Number, required: true },
+  reason: { type: String, required: true },
 }, { _id: false });
 
 const ResultSchema = new mongoose.Schema({
@@ -39,7 +47,7 @@ const ResultSchema = new mongoose.Schema({
   careerFit: {
     primary: { type: CareerFitEntrySchema, required: true },
     secondary: { type: CareerFitEntrySchema, required: true },
-    rejected: { type: [String], default: [] },
+    rejected: { type: [RejectedCareerSchema], default: [] },
   },
   aiSuggestionSummary: { type: String, required: true },
 }, { versionKey: false });
