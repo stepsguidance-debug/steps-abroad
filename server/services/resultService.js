@@ -711,6 +711,50 @@ async function generateResultForUser(userId) {
   return { ...saved, userName: student.name };
 }
 
+// ─── Queue (rate-limit guard for Gemini Pro 2 RPM) ──────────────────────────
+
+let isProcessing = false;
+const queue = []; // { userId, resolve, reject }
+
+function queuePositionFor(userId) {
+  // 0 = not in queue (or currently processing if isProcessing && first added).
+  const idx = queue.findIndex((item) => String(item.userId) === String(userId));
+  if (idx === -1) return 0;
+  // +1 because position 1 = next to run; the currently processing job is not in the queue array
+  return idx + 1 + (isProcessing ? 1 : 0);
+}
+
+function isQueueProcessing() {
+  return isProcessing;
+}
+
+async function processQueue() {
+  if (isProcessing || queue.length === 0) return;
+  isProcessing = true;
+  const { userId, resolve, reject } = queue.shift();
+  try {
+    const result = await generateResultForUser(userId);
+    resolve(result);
+  } catch (err) {
+    reject(err);
+  } finally {
+    // 35s gap to respect 2 RPM Gemini Pro free-tier limit
+    await new Promise((r) => setTimeout(r, 35000));
+    isProcessing = false;
+    processQueue();
+  }
+}
+
+function queuedGenerate(userId) {
+  return new Promise((resolve, reject) => {
+    queue.push({ userId, resolve, reject });
+    processQueue();
+  });
+}
+
 module.exports = {
   generateResultForUser,
+  queuedGenerate,
+  queuePositionFor,
+  isQueueProcessing,
 };
