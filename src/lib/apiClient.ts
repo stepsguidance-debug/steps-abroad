@@ -7,6 +7,18 @@ import {
 } from "./mocks";
 import type { AuthResponse, NewQuestionInput, Question, Result, Student, User } from "./types";
 
+export interface SystemHealthCheck {
+  name: string;
+  status: "ok" | "fail";
+  detail?: string;
+  responseMs?: number;
+  error?: string;
+}
+export interface SystemHealthReport {
+  overall: "healthy" | "degraded";
+  checks: SystemHealthCheck[];
+}
+
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
 export const USING_MOCKS = !BASE_URL;
 
