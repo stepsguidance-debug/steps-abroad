@@ -98,7 +98,7 @@ export const apiClient = {
 
   async addQuestion(input: NewQuestionInput): Promise<Question> {
     if (USING_MOCKS) {
-      const created: Question = { _id: `q-${Date.now()}`, order: MOCK_QUESTIONS.length + 1, ...input };
+      const created: Question = { _id: `q-${Date.now()}`, order: MOCK_QUESTIONS.length + 1, sectionTitle: input.section, ...input };
       (MOCK_QUESTIONS as Question[]).push(created);
       return created;
     }
