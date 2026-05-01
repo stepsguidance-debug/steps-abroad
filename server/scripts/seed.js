@@ -56,11 +56,26 @@ async function seedQuestions() {
   return questions;
 }
 
+async function seedDemoStudents() {
+  const password = await bcrypt.hash("demo123", 10);
+  const demos = [
+    { name: "Aarav Sharma", email: "aarav@example.com" },
+    { name: "Diya Patel", email: "diya@example.com" },
+    { name: "Rohan Verma", email: "rohan@example.com" },
+  ];
+  await StudentAccount.insertMany(
+    demos.map((d) => ({ ...d, password, role: "student", status: "pending" })),
+  );
+  return demos.length;
+}
+
 (async () => {
+  const withDemoStudents = process.argv.includes("--with-demo-students");
   await connectDatabases();
   await recreateCollections();
   await seedAdmin();
   const seededQuestions = await seedQuestions();
+  const demoStudentCount = withDemoStudents ? await seedDemoStudents() : 0;
 
   const counts = {
     admin_accounts: await AdminAccount.countDocuments(),
