@@ -30,6 +30,15 @@ export interface SystemHealthReport {
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
 export const USING_MOCKS = import.meta.env.VITE_USE_MOCKS === "true";
 
+if (USING_MOCKS) {
+  // Loud, easy-to-spot banner so a deployed build never silently uses fake data.
+  // eslint-disable-next-line no-console
+  console.warn(
+    "%c[apiClient] MOCK MODE ACTIVE — VITE_USE_MOCKS=true. No real backend calls will be made.",
+    "background:#facc15;color:#111;font-weight:bold;padding:2px 6px;border-radius:4px;",
+  );
+}
+
 const TOKEN_KEY = "sg_token";
 
 function getToken() {
