@@ -98,6 +98,9 @@ async function seedDemoStudents() {
   }, {});
   console.log(`Confirmed ${seededQuestions.length} questions seeded across sections A-G: ${JSON.stringify(sectionCounts)}`);
   console.log("Confirmed 1 admin account seeded");
+  if (withDemoStudents) {
+    console.log(`Confirmed ${demoStudentCount} demo student accounts seeded (password: demo123)`);
+  }
 
   await disconnectDatabases();
 })().catch(async (error) => {
