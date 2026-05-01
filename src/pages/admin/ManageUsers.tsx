@@ -21,8 +21,22 @@ const ManageUsers = () => {
   const [toDelete, setToDelete] = useState<Student | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = () => apiClient.getStudents().then(setStudents);
+  const refresh = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getStudents();
+      setStudents(data);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load students");
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => { refresh(); }, []);
 
   const handleAdd = async (e?: React.FormEvent) => {
@@ -99,6 +113,19 @@ const ManageUsers = () => {
         </Dialog>
       </div>
 
+      {loadError ? (
+        <div className="glass-card p-6 text-sm">
+          <p className="font-semibold text-destructive">Couldn't load students</p>
+          <p className="text-muted-foreground mt-1">{loadError}</p>
+          <Button className="mt-3" variant="outline" onClick={refresh}>Retry</Button>
+        </div>
+      ) : loading ? (
+        <div className="glass-card p-6 text-sm text-muted-foreground">Loading students…</div>
+      ) : students.length === 0 ? (
+        <div className="glass-card p-8 text-center text-sm text-muted-foreground">
+          No students yet. Create one using the <span className="font-medium text-foreground">Add Student</span> button.
+        </div>
+      ) : (
       <div className="glass-card overflow-hidden">
         <div className="w-full overflow-x-auto">
         <table className="w-full min-w-[40rem] text-sm">
@@ -129,6 +156,7 @@ const ManageUsers = () => {
         </table>
         </div>
       </div>
+      )}
 
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>

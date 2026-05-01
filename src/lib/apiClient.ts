@@ -30,6 +30,15 @@ export interface SystemHealthReport {
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
 export const USING_MOCKS = import.meta.env.VITE_USE_MOCKS === "true";
 
+if (USING_MOCKS) {
+  // Loud, easy-to-spot banner so a deployed build never silently uses fake data.
+  // eslint-disable-next-line no-console
+  console.warn(
+    "%c[apiClient] MOCK MODE ACTIVE — VITE_USE_MOCKS=true. No real backend calls will be made.",
+    "background:#facc15;color:#111;font-weight:bold;padding:2px 6px;border-radius:4px;",
+  );
+}
+
 const TOKEN_KEY = "sg_token";
 
 function getToken() {
@@ -81,7 +90,13 @@ export const apiClient = {
 
   async getStudents(): Promise<Student[]> {
     if (USING_MOCKS) return mockStudents;
-    return request<Student[]>("/api/admin/students");
+    const data = await request<Student[] | { students: Student[] }>("/api/admin/students");
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray((data as { students?: Student[] }).students)) {
+      return (data as { students: Student[] }).students;
+    }
+    console.error("[apiClient] Unexpected /api/admin/students response shape:", data);
+    return [];
   },
 
   async addStudent(input: { name: string; email: string; password: string }): Promise<Student> {

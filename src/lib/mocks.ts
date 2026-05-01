@@ -1,4 +1,15 @@
+/**
+ * DEV-ONLY mock data.
+ * Only consumed by `apiClient.ts` when `import.meta.env.VITE_USE_MOCKS === "true"`.
+ * Never import this file from feature components — questions, students, and results
+ * must always come from the real API in production.
+ */
 import type { Question, Result, Student, User } from "./types";
+
+if (import.meta.env.PROD && import.meta.env.VITE_USE_MOCKS !== "true") {
+  // eslint-disable-next-line no-console
+  console.warn("[mocks] mocks.ts was imported in a production build without VITE_USE_MOCKS=true.");
+}
 
 export const MOCK_ADMIN: User = {
   _id: "admin-1",

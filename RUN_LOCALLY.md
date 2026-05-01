@@ -99,3 +99,28 @@ in MongoDB.
   (not inside `src/`) and you restarted `npm run dev` after creating it.
 - **Gemini errors** — verify the API key has the Generative Language API enabled
   in Google AI Studio.
+
+## Deploying to Vercel — important env-var note
+
+Vercel only deploys the **frontend** (the `server/` folder is not run there).
+For the deployed site to talk to a real backend you must:
+
+1. Host the Node backend separately (Render, Fly.io, Railway, your own VPS).
+2. On the Vercel project, set:
+   - `VITE_API_BASE_URL=https://your-backend-host` (no trailing slash)
+   - **Make sure `VITE_USE_MOCKS` is NOT set** (or set it to `false`).
+     If `VITE_USE_MOCKS=true` is configured on Vercel the deployed site will
+     silently use fake data and admin/student lists will look broken.
+
+You can confirm which mode the deployed build is in by opening the browser
+console — mock mode prints a yellow `[apiClient] MOCK MODE ACTIVE` banner.
+
+## Seeding demo students
+
+By default the seed script only creates the admin account. To also create
+3 demo students (password `demo123`):
+
+```bash
+cd server
+node scripts/seed.js --with-demo-students
+```

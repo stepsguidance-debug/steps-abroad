@@ -39,6 +39,11 @@ const Assessment = () => {
       return;
     }
     apiClient.getQuestions().then((qs) => {
+      if (!Array.isArray(qs) || qs.some((q) => !q || !Array.isArray(q.choices))) {
+        console.error("[Assessment] Invalid questions payload from API:", qs);
+        setQuestions([]);
+        return;
+      }
       setQuestions(qs);
       const map = new Map<string, Map<string, string>>();
       qs.forEach((q) => {
@@ -47,6 +52,9 @@ const Assessment = () => {
         map.set(q._id, m);
       });
       labelByValue.current = map;
+    }).catch((err) => {
+      console.error("[Assessment] Failed to load questions:", err);
+      setQuestions([]);
     });
   }, [navigate, user]);
 
@@ -286,7 +294,7 @@ const Assessment = () => {
           </div>
         </div>
 
-        <div className="glass-card p-5 sm:p-7">
+        <div key={q._id} className="glass-card p-5 sm:p-7">
           <div className="flex items-center gap-2 mb-4">
             <span className="h-7 w-7 rounded-lg btn-gold text-xs flex items-center justify-center">{q.section}</span>
             <span className="text-xs uppercase tracking-wider text-muted-foreground">{q.sectionTitle} · {q.layer}</span>
@@ -298,7 +306,7 @@ const Assessment = () => {
             {q.choices.map((choice) => {
               const selected = answers[q._id] === choice.value;
               return (
-                <div key={choice.value} className="space-y-2">
+                <div key={`${q._id}-${choice.value}`} className="space-y-2">
                   <button onClick={() => setAnswer(choice.value)}
                     className={`w-full text-left rounded-xl border p-3 text-sm transition-all ${
                       selected ? "btn-gold border-transparent" : "border-border hover:border-primary/50"
@@ -307,6 +315,7 @@ const Assessment = () => {
                   </button>
                   {selected && choice.allowCustomInput && (
                     <input
+                      key={`${q._id}-${choice.value}-custom`}
                       type="text"
                       value={customAnswers[q._id] || ""}
                       onChange={(e) => setCustomAnswer(e.target.value)}
