@@ -21,8 +21,22 @@ const ManageUsers = () => {
   const [toDelete, setToDelete] = useState<Student | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = () => apiClient.getStudents().then(setStudents);
+  const refresh = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getStudents();
+      setStudents(data);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load students");
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => { refresh(); }, []);
 
   const handleAdd = async (e?: React.FormEvent) => {
