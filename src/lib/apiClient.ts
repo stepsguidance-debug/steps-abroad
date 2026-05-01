@@ -90,7 +90,13 @@ export const apiClient = {
 
   async getStudents(): Promise<Student[]> {
     if (USING_MOCKS) return mockStudents;
-    return request<Student[]>("/api/admin/students");
+    const data = await request<Student[] | { students: Student[] }>("/api/admin/students");
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray((data as { students?: Student[] }).students)) {
+      return (data as { students: Student[] }).students;
+    }
+    console.error("[apiClient] Unexpected /api/admin/students response shape:", data);
+    return [];
   },
 
   async addStudent(input: { name: string; email: string; password: string }): Promise<Student> {
