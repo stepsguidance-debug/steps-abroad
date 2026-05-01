@@ -16,6 +16,7 @@ interface SavedProgress {
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const toChoiceKey = (value: string, index: number) => `${value}::${index}`;
 
 const Assessment = () => {
   const navigate = useNavigate();
@@ -31,7 +32,29 @@ const Assessment = () => {
   const [hydrated, setHydrated] = useState(false);
   const [queueStatus, setQueueStatus] = useState<{ position: number; isProcessing: boolean } | null>(null);
 
-  const labelByValue = useRef<Map<string, Map<string, string>>>(new Map());
+  const questionById = useMemo(
+    () => new Map(questions.map((question) => [question._id, question])),
+    [questions],
+  );
+
+  const resolveChoice = (questionId: string, storedAnswer: string | undefined) => {
+    if (!storedAnswer) return null;
+    const question = questionById.get(questionId);
+    if (!question) return null;
+    const exact = question.choices.find((choice, index) => toChoiceKey(choice.value, index) === storedAnswer);
+    if (exact) return exact;
+    // Backward compatibility for older saved progress that stored plain choice.value.
+    return question.choices.find((choice) => choice.value === storedAnswer) || null;
+  };
+
+  const toStoredAnswer = (questionId: string, selectedValue: string | undefined) => {
+    if (!selectedValue) return undefined;
+    const question = questionById.get(questionId);
+    if (!question) return selectedValue;
+    const idx = question.choices.findIndex((choice) => choice.value === selectedValue);
+    if (idx < 0) return selectedValue;
+    return toChoiceKey(selectedValue, idx);
+  };
 
   useEffect(() => {
     if (user?.role === "student" && user.status === "answered") {
@@ -45,13 +68,6 @@ const Assessment = () => {
         return;
       }
       setQuestions(qs);
-      const map = new Map<string, Map<string, string>>();
-      qs.forEach((q) => {
-        const m = new Map<string, string>();
-        q.choices.forEach((c) => m.set(c.value, c.label));
-        map.set(q._id, m);
-      });
-      labelByValue.current = map;
     }).catch((err) => {
       console.error("[Assessment] Failed to load questions:", err);
       setQuestions([]);
@@ -89,7 +105,7 @@ const Assessment = () => {
         const ans: Record<string, string> = {};
         const custom: Record<string, string> = {};
         draft.answers.forEach((a) => {
-          ans[a.questionId] = a.selectedValue;
+          ans[a.questionId] = toStoredAnswer(a.questionId, a.selectedValue) || a.selectedValue;
           if (a.customAnswer) custom[a.questionId] = a.customAnswer;
         });
         setAnswers(ans);
@@ -99,7 +115,7 @@ const Assessment = () => {
       }
       setHydrated(true);
     }).catch(() => setHydrated(true));
-  }, [user, questions, hydrated, storageKey]);
+  }, [user, questions, hydrated, storageKey, questionById]);
 
   const total = questions.length;
   const q = questions[idx];
@@ -116,9 +132,14 @@ const Assessment = () => {
   ) => {
     if (!user || !storageKey) return;
     const answersMap: SavedProgress["answers"] = {};
-    Object.entries(nextAnswers).forEach(([qid, value]) => {
-      const label = labelByValue.current.get(qid)?.get(value) || value;
-      answersMap[qid] = { selectedValue: value, selectedLabel: label, customAnswer: nextCustom[qid] };
+    Object.entries(nextAnswers).forEach(([qid, stored]) => {
+      const selectedChoice = resolveChoice(qid, stored);
+      if (!selectedChoice) return;
+      answersMap[qid] = {
+        selectedValue: selectedChoice.value,
+        selectedLabel: selectedChoice.label,
+        customAnswer: nextCustom[qid],
+      };
     });
     const payload: SavedProgress = {
       userId: user._id,
@@ -132,9 +153,9 @@ const Assessment = () => {
     } catch { /* quota */ }
   };
 
-  const setAnswer = (value: string) => {
+  const setAnswer = (value: string, choiceIndex: number) => {
     if (!q) return;
-    const next = { ...answers, [q._id]: value };
+    const next = { ...answers, [q._id]: toChoiceKey(value, choiceIndex) };
     setAnswers(next);
     persistProgress(next, customAnswers, idx);
   };
@@ -151,19 +172,26 @@ const Assessment = () => {
       toast({ title: "Please answer to continue", variant: "destructive" });
       return;
     }
-    const selectedChoice = q.choices.find((choice) => choice.value === answers[q._id]);
+    const selectedChoice = resolveChoice(q._id, answers[q._id]);
     if (selectedChoice?.allowCustomInput && !customAnswers[q._id]?.trim()) {
       toast({ title: "Please type your own answer to continue", variant: "destructive" });
       return;
     }
 
     // Best-effort backend draft
-    const draftPayload = Object.entries(answers).map(([questionId, value]) => ({
-      questionId,
-      selectedValue: value,
-      selectedLabel: labelByValue.current.get(questionId)?.get(value) || value,
-      customAnswer: customAnswers[questionId]?.trim() || undefined,
-    }));
+    const draftPayload = Object.entries(answers)
+      .map(([questionId, stored]) => {
+        const selectedChoice = resolveChoice(questionId, stored);
+        if (!selectedChoice) return null;
+        const custom = customAnswers[questionId]?.trim();
+        return {
+          questionId,
+          selectedValue: selectedChoice.value,
+          selectedLabel: selectedChoice.label,
+          ...(custom ? { customAnswer: custom } : {}),
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
     void apiClient.saveDraft(draftPayload);
 
     if (idx < total - 1) {
@@ -186,11 +214,18 @@ const Assessment = () => {
       }, 5000);
     }
     try {
-      const payload = Object.entries(answers).map(([questionId, value]) => ({
-        questionId,
-        value,
-        customAnswer: customAnswers[questionId]?.trim() || undefined,
-      }));
+      const payload = Object.entries(answers)
+        .map(([questionId, stored]) => {
+          const selectedChoice = resolveChoice(questionId, stored);
+          if (!selectedChoice) return null;
+          const custom = customAnswers[questionId]?.trim();
+          return {
+            questionId,
+            value: selectedChoice.value,
+            ...(custom ? { customAnswer: custom } : {}),
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
       await apiClient.submitResponses(payload);
       // Clear local + server draft on success
       try { localStorage.removeItem(storageKey); } catch {}
@@ -208,7 +243,7 @@ const Assessment = () => {
     const restoredAnswers: Record<string, string> = {};
     const restoredCustom: Record<string, string> = {};
     Object.entries(resumeOffer.answers).forEach(([qid, a]) => {
-      restoredAnswers[qid] = a.selectedValue;
+      restoredAnswers[qid] = toStoredAnswer(qid, a.selectedValue) || a.selectedValue;
       if (a.customAnswer) restoredCustom[qid] = a.customAnswer;
     });
     setAnswers(restoredAnswers);
@@ -303,11 +338,11 @@ const Assessment = () => {
           <p className="text-lg font-medium leading-relaxed">{q.questionText}</p>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-2">
-            {q.choices.map((choice) => {
-              const selected = answers[q._id] === choice.value;
+            {q.choices.map((choice, choiceIndex) => {
+              const selected = answers[q._id] === toChoiceKey(choice.value, choiceIndex);
               return (
-                <div key={`${q._id}-${choice.value}`} className="space-y-2">
-                  <button onClick={() => setAnswer(choice.value)}
+                <div key={`${q._id}-${choice.value}-${choiceIndex}`} className="space-y-2">
+                  <button onClick={() => setAnswer(choice.value, choiceIndex)}
                     className={`w-full text-left rounded-xl border p-3 text-sm transition-all ${
                       selected ? "btn-gold border-transparent" : "border-border hover:border-primary/50"
                     }`}>
@@ -315,7 +350,7 @@ const Assessment = () => {
                   </button>
                   {selected && choice.allowCustomInput && (
                     <input
-                      key={`${q._id}-${choice.value}-custom`}
+                      key={`${q._id}-${choice.value}-${choiceIndex}-custom`}
                       type="text"
                       value={customAnswers[q._id] || ""}
                       onChange={(e) => setCustomAnswer(e.target.value)}

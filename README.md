@@ -1,3 +1,11 @@
-# Welcome to your Lovable project
+# Steps Guidance
 
-TODO: Document your project here
+This repo contains two separate apps:
+
+- `frontend/`: Vite + React + Tailwind (student + admin UI)
+- `backend/`: Express + MongoDB + Gemini (API)
+
+## Run locally
+
+See [RUN_LOCALLY.md](RUN_LOCALLY.md).
+

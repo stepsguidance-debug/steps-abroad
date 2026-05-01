@@ -412,10 +412,17 @@ const genAI = process.env.GEMINI_API_KEY
   ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
 const GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || "gemini-2.5-pro";
+const GEMINI_MODEL_PRO_FALLBACK =
+  process.env.GEMINI_MODEL_PRO_FALLBACK || "gemini-pro-latest";
 const GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || "gemini-2.5-flash";
 const GEMINI_MODEL_SUMMARY = process.env.GEMINI_MODEL_SUMMARY || GEMINI_MODEL_FLASH;
 const GEMINI_QUEUE_DELAY_MS = parseInt(process.env.GEMINI_QUEUE_DELAY_MS, 10) || 35000;
 const GEMINI_QUEUE_MAX_SIZE = parseInt(process.env.GEMINI_QUEUE_MAX_SIZE, 10) || 10;
+
+function getProFallbackCandidates() {
+  const configured = String(GEMINI_MODEL_PRO_FALLBACK || "").trim();
+  return configured ? [configured] : [];
+}
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -533,26 +540,53 @@ Return ONLY a valid raw JSON object with no markdown, no code blocks, no explana
 }`;
 
   const userMessage = `Here are all of ${student.name}'s answers:\n\n${readableAnswers}`;
+  async function runScoringModel(modelName) {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+    });
 
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_PRO });
+    const raw = result.response.text().trim().replace(/^```json|^```|```$/g, "").trim();
+    console.log(`\n========== ${modelName} RESPONSE ==========`);
+    console.log(raw);
+    console.log("==============================================\n");
 
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: userMessage }] }],
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-  });
-
-  const raw = result.response.text().trim().replace(/^```json|^```|```$/g, "").trim();
-
-  console.log(`\n========== ${GEMINI_MODEL_PRO} RESPONSE ==========`);
-  console.log(raw);
-  console.log("==============================================\n");
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error(`Failed to parse ${modelName} response:`, err.message);
+      throw new Error(`${modelName} returned invalid JSON. Check the logs above.`);
+    }
+  }
 
   let parsed;
   try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    console.error("Failed to parse Gemini 2.5 Pro response:", err.message);
-    throw new Error(`${GEMINI_MODEL_PRO} returned invalid JSON. Check the logs above.`);
+    parsed = await runScoringModel(GEMINI_MODEL_PRO);
+  } catch (primaryErr) {
+    const fallbackCandidates = getProFallbackCandidates().filter(
+      (name) => name !== GEMINI_MODEL_PRO
+    );
+    if (fallbackCandidates.length === 0) {
+      throw primaryErr;
+    }
+
+    console.warn(
+      `${GEMINI_MODEL_PRO} failed (${primaryErr.message}). Trying fallback candidates: ${fallbackCandidates.join(", ")}`
+    );
+    let lastFallbackErr = null;
+    for (const modelName of fallbackCandidates) {
+      try {
+        parsed = await runScoringModel(modelName);
+        break;
+      } catch (fallbackErr) {
+        lastFallbackErr = fallbackErr;
+      }
+    }
+
+    if (!parsed) {
+      throw lastFallbackErr || primaryErr;
+    }
   }
 
   // Clamp all numeric values to be safe
@@ -770,6 +804,7 @@ module.exports = {
   queuePositionFor,
   isQueueProcessing,
   GEMINI_MODEL_PRO,
+  GEMINI_MODEL_PRO_FALLBACK,
   GEMINI_MODEL_FLASH,
   GEMINI_MODEL_SUMMARY,
   GEMINI_QUEUE_DELAY_MS,

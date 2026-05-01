@@ -1,58 +1,5 @@
-// require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
-// const express = require("express");
-// const cors = require("cors");
-// const { connectDatabases } = require("./db");
-// const {
-//   GEMINI_MODEL_PRO,
-//   GEMINI_MODEL_FLASH,
-//   GEMINI_MODEL_SUMMARY,
-//   GEMINI_QUEUE_DELAY_MS,
-//   GEMINI_QUEUE_MAX_SIZE,
-// } = require("./services/resultService");
-
-// const authRoutes = require("./routes/auth");
-// const adminRoutes = require("./routes/admin");
-// const questionRoutes = require("./routes/questions");
-// const responseRoutes = require("./routes/responses");
-// const resultRoutes = require("./routes/results");
-// const healthRoutes = require("./routes/health");
-
-// const app = express();
-
-// app.use(cors({
-//   origin: (process.env.CLIENT_ORIGIN || "http://localhost:8080").split(","),
-//   credentials: true,
-// }));
-// app.use(express.json({ limit: "1mb" }));
-
-// app.get("/", (_req, res) => {
-//   res.json({ ok: true, service: "steps-guidance-api" });
-// });
-
-// app.use("/api/auth", authRoutes);
-// app.use("/api/admin", adminRoutes);
-// app.use("/api/questions", questionRoutes);
-// app.use("/api/responses", responseRoutes);
-// app.use("/api/results", resultRoutes);
-// app.use("/api/health", healthRoutes);
-
-// app.use((err, _req, res, _next) => {
-//   console.error(err);
-//   res.status(err.status || 500).json({ error: err.message || "Server error" });
-// });
-
-// const PORT = process.env.PORT || 5000;
-
-// connectDatabases().then(({ admin, students }) => {
-//   console.log(`Mongo connected: ${admin}, ${students}`);
-//   console.log(`Gemini models: pro=${GEMINI_MODEL_PRO}, flash=${GEMINI_MODEL_FLASH}, summary=${GEMINI_MODEL_SUMMARY}`);
-//   console.log(`Queue config: delay=${GEMINI_QUEUE_DELAY_MS}ms, maxSize=${GEMINI_QUEUE_MAX_SIZE}`);
-//   app.listen(PORT, () => console.log(`API listening on :${PORT}`));
-// }).catch((error) => {
-//   console.error("Mongo connection failed", error);
-//   process.exit(1);
-// });
-require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
 const express = require("express");
 const cors = require("cors");
@@ -77,21 +24,12 @@ const healthRoutes   = require("./routes/health");
 // ─────────────────────────────────────────────
 const app = express();
 
-// ─────────────────────────────────────────────
-//  CORS
-//  Allows both local dev (port 8080 / 5173)
-//  and the live Vercel frontend.
-//  Add any extra origins to CLIENT_ORIGIN or
-//  FRONTEND_URL in .env separated by commas.
-// ─────────────────────────────────────────────
 const allowedOrigins = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "https://steps-abroad.vercel.app",
   ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(",") : []),
-  ...(process.env.FRONTEND_URL  ? process.env.FRONTEND_URL.split(",")  : []),
-].filter(Boolean);
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : []),
+]
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -137,6 +75,13 @@ async function bootstrap() {
 // Ensure DB is ready before every request
 app.use(async (_req, _res, next) => {
   try {
+    // Allow basic health ping even when DB is down/misconfigured.
+    // Everything else (auth, admin, questions, responses, results) requires DB.
+    const url = _req.originalUrl || "";
+    if (url === "/" || url.startsWith("/api/health")) {
+      return next();
+    }
+
     await bootstrap();
     next();
   } catch (err) {
@@ -190,17 +135,21 @@ app.use((err, _req, res, _next) => {
 // ─────────────────────────────────────────────
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 5000;
-  bootstrap()
-    .then(() => {
-      app.listen(PORT, () => {
-        console.log(`\nAPI listening on http://localhost:${PORT}`);
-        console.log(`Health check: http://localhost:${PORT}/api/health\n`);
-      });
-    })
-    .catch((error) => {
-      console.error("Failed to start server:", error);
-      process.exit(1);
+  const server = app.listen(PORT, () => {
+    console.log(`\nAPI listening on port ${PORT}`);
+    console.log("Health check path: /api/health\n");
+    bootstrap().catch((error) => {
+      console.error("DB bootstrap failed on startup (server still running):", error?.message || error);
     });
+  });
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use. Stop the running process or set a different PORT in .env.`);
+      process.exit(1);
+    }
+    console.error("Server listen error:", error.message || error);
+    process.exit(1);
+  });
 }
 
 // ─────────────────────────────────────────────

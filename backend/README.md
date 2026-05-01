@@ -5,7 +5,7 @@ Express + MongoDB + Gemini backend for the Steps Guidance frontend.
 ## Local setup
 
 ```bash
-cd server
+cd backend
 npm install
 cp .env.example .env
 # edit .env: set MONGODB_URI, JWT_SECRET, GEMINI_API_KEY

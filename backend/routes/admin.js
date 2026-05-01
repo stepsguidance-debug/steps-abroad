@@ -9,7 +9,7 @@ router.use(verifyJWT, requireAdmin);
 
 router.get("/students", async (req, res, next) => {
   try {
-    console.log("[admin] GET /students hit by", req.user?.id || "unknown");
+    console.log("[admin] GET /students hit by", req.user?._id || "unknown");
     const students = await StudentAccount.find().sort({ createdAt: -1 }).lean();
     const results = await Result.find({ userId: { $in: students.map((student) => student._id) } }).lean();
     const resultsByUserId = new Map(results.map((result) => [String(result.userId), result]));

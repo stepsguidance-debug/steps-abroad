@@ -30,12 +30,16 @@
 .env.development.local
 .env.test.local
 .env.production.local
+frontend/.env
+frontend/.env.*
+backend/.env
+backend/.env.*
 
 # ────────────────────────────────────────────
 #  Dependencies
 # ────────────────────────────────────────────
 node_modules
-server/node_modules
+**/node_modules
 
 # ────────────────────────────────────────────
 #  Build output
@@ -43,6 +47,7 @@ server/node_modules
 dist
 dist-ssr
 *.local
+frontend/dist
 
 # ────────────────────────────────────────────
 #  Logs

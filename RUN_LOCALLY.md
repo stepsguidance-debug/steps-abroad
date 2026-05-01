@@ -4,8 +4,8 @@ The project has two parts:
 
 ```
 .
-├── src/        ← React frontend (this repo's root)
-└── server/     ← Express + MongoDB + Gemini backend
+├── frontend/   ← React frontend
+└── backend/    ← Express + MongoDB + Gemini backend
 ```
 
 You can run the frontend by itself (it falls back to **mock data** so all screens work),
@@ -18,6 +18,7 @@ or run both together against your real MongoDB + Gemini.
 ```bash
 git clone <your-repo-url>
 cd <repo>
+cd frontend
 npm install
 npm run dev          # http://localhost:8080
 ```
@@ -36,12 +37,12 @@ is wired up against in-memory mock data — perfect for previewing the UI.
 ### a. Start the backend
 
 ```bash
-cd server
+cd backend
 npm install
 cp .env.example .env
 ```
 
-Edit `server/.env`:
+Edit `backend/.env`:
 
 ```
 PORT=5000
@@ -65,7 +66,7 @@ npm run dev          # http://localhost:5000
 
 ### b. Point the frontend at it
 
-In the **repo root** (not in `server/`), create `.env`:
+In `frontend/`, create `.env`:
 
 ```
 VITE_API_BASE_URL=http://localhost:5000
@@ -74,6 +75,7 @@ VITE_API_BASE_URL=http://localhost:5000
 Then in another terminal:
 
 ```bash
+cd frontend
 npm install          # if you haven't already
 npm run dev          # http://localhost:8080
 ```
@@ -93,16 +95,17 @@ in MongoDB.
 
 - **"Mongo connection failed"** — double-check `MONGODB_URI` and that your IP is
   allowed in Atlas (Network Access → Add IP).
-- **CORS error in browser** — set `CLIENT_ORIGIN` in `server/.env` to the exact
+- **CORS error in browser** — set `CLIENT_ORIGIN` in `backend/.env` to the exact
   origin your frontend is served from (no trailing slash).
-- **Frontend still shows mock data** — make sure `.env` exists at the repo root
-  (not inside `src/`) and you restarted `npm run dev` after creating it.
+- **Frontend still shows mock data** — make sure `frontend/.env` exists and you
+  restarted `npm run dev` after creating it.
 - **Gemini errors** — verify the API key has the Generative Language API enabled
   in Google AI Studio.
 
 ## Deploying to Vercel — important env-var note
 
-Vercel only deploys the **frontend** (the `server/` folder is not run there).
+Vercel deploys each folder independently. You should create two Vercel projects:
+one rooted at `frontend/` and one rooted at `backend/`.
 For the deployed site to talk to a real backend you must:
 
 1. Host the Node backend separately (Render, Fly.io, Railway, your own VPS).
@@ -121,6 +124,6 @@ By default the seed script only creates the admin account. To also create
 3 demo students (password `demo123`):
 
 ```bash
-cd server
+cd backend
 node scripts/seed.js --with-demo-students
 ```
