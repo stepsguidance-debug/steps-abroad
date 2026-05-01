@@ -1,97 +1,72 @@
-## Plan — 4 Changes
+# Plan — Fix the 3 bugs
 
-### Change 1: Save & Resume Assessment
+## Bug 1 — Wrong choices showing on every question
 
-**Frontend (`src/pages/Assessment.tsx`)**
-- On every answer change / `next()`, write to `localStorage` under `assessment_progress_${user._id}`:
-  ```json
-  { userId, currentSection, currentQuestionIndex, answers: { [qId]: { selectedValue, selectedLabel } }, savedAt }
-  ```
-- On mount: check localStorage. If exists and `savedAt` < 7 days old → render a top banner:
-  > "You have a saved attempt from [date]. Would you like to continue where you left off?" `[Continue]` `[Start fresh]`
-- Continue → restore `idx`, `answers`, `customAnswers`. Start fresh → delete entry.
-- If localStorage missing, fetch `GET /api/responses/draft` and hydrate from server draft.
-- On every `next()` also call `PATCH /api/responses/draft` (debounced) with current partial answers.
-- On successful submit → delete localStorage entry.
+### What I found in the code
+`src/pages/Assessment.tsx` already renders choices from `q.choices` (line 298), where `q = questions[idx]`. There is no shared/cached choice state in the component itself, so the React-side render is technically correct.
+
+However, two real risks remain that match the screenshots:
+
+1. **No `key` on the question card** — when `idx` changes, React reuses the same DOM nodes. If anything inside ever takes `defaultValue`/uncontrolled inputs (it does for the custom-answer `<input>`), stale values can persist between questions.
+2. **Custom-answer input is keyed only by `choice.value`**, not by question — when two different questions share an option `value` (e.g. multiple Section G options reuse `"pre_ug"` — see `server/data/questionBank.js` lines 432-434), the same React element survives the question change and looks "stuck".
+3. **`apiClient.getQuestions()` returns the raw API payload** with no shape validation. If the backend ever returns the wrong shape (e.g. an error envelope), the array index lookup silently returns the wrong object.
+
+### What I'll change
+- **`src/pages/Assessment.tsx`**
+  - Wrap the question card div with `key={q._id}` so React fully remounts it whenever the question changes — this guarantees every piece of internal state (including the custom-answer input) is reset.
+  - Add a dedicated `useEffect([q?._id])` that clears any transient per-question UI state.
+  - Render the choices list with `key={`${q._id}-${choice.value}`}` instead of just `choice.value` so duplicate values across questions cannot collide.
+  - Add a runtime guard: if `apiClient.getQuestions()` returns a non-array or an item without a `choices` array, log to console and show an "Unable to load questions" screen instead of rendering garbage.
+- **No backend changes** — `server/data/questionBank.js` is correct, each question has its own `choices` array, and `server/routes/questions.js` returns them via `Question.find().lean()` unmodified.
+
+## Bug 2 — Make sure questions only come from MongoDB
+
+### What I found
+- `src/lib/mocks.ts` exports `MOCK_QUESTIONS`, but it is only used in `apiClient.getQuestions()` when `USING_MOCKS === true` (i.e. `VITE_USE_MOCKS=true`).
+- No other file in `src/` defines hardcoded questions or imports `MOCK_QUESTIONS` outside of `apiClient.ts`.
+- `MOCK_QUESTIONS` does **not** contain the "10th Grade / O-Level / HLCS" choices, so it is not the source of the bleed-over seen in the screenshots.
+
+### What I'll change
+- **`src/lib/apiClient.ts`** — add an explicit log when `USING_MOCKS` is true at module load, so it's obvious in the console whether the deployed Vercel build is silently in mock mode.
+- **`src/lib/mocks.ts`** — leave the file but add a top-of-file comment that it is dev-only; export a named guard (`assertNotInProd`) that throws if imported at runtime when `VITE_USE_MOCKS !== "true"` and `import.meta.env.PROD === true`.
+- **`vercel.json` / build** — verify `VITE_USE_MOCKS` is **not** set on the Vercel deployment (this is documentation only — I'll add a note to `RUN_LOCALLY.md`).
+
+## Bug 3 — `/admin/users` page is blank
+
+### What I found
+- Frontend (`src/pages/admin/ManageUsers.tsx`) calls `apiClient.getStudents()` which `GET /api/admin/students` with the `Authorization: Bearer <token>` header (handled in `apiClient.request`). The frontend expects a **plain array** of students.
+- Backend (`server/routes/admin.js`) returns a **plain array** as well — shapes match. The route is mounted under `/api/admin` and protected by `verifyJWT, requireAdmin`.
+- Most likely real causes for an empty page on the deployed site:
+  1. The Vercel build has no Node backend at all → request 404s → frontend silently shows an empty list (the current code has no error UI).
+  2. `student_accounts` collection is empty in the connected Mongo — the seed only seeds the admin account, not students.
+  3. JWT middleware rejects (e.g. expired token) → the existing `request()` throws but `ManageUsers` doesn't surface the error.
+
+### What I'll change
+- **`src/pages/admin/ManageUsers.tsx`**
+  - Wrap `refresh()` in try/catch and store an error string in state.
+  - When the list is empty (and no error), show: *"No students yet. Create one using the Add Student button."*
+  - When the request fails, show the error message and a Retry button (so a 401/404/500 is no longer silent).
+- **`src/lib/apiClient.ts`** — make `getStudents()` tolerate both `Array` and `{ students: Array }` response shapes (defensive, in case the backend is later changed).
+- **`server/routes/admin.js`** — add a one-line `console.log("[admin] GET /students hit by", req.user?.id)` at the top of the GET handler so deploy logs make it obvious whether the route is reached.
+- **`server/scripts/seed.js`** — add an optional `--with-demo-students` flag that seeds 3 demo students (so a freshly seeded DB doesn't look broken). Default seed behaviour unchanged.
+- Confirm in `server/db.js` that `StudentAccount` (in `routes/admin.js`) reads from `stepsguidance_admin.student_accounts` — **already correct** (model uses `adminConnection`).
+
+## Files changing
+
+**Frontend**
+- `src/pages/Assessment.tsx` — `key={q._id}`, choice key namespacing, payload guard, reset effect
+- `src/pages/admin/ManageUsers.tsx` — error state, empty state, retry
+- `src/lib/apiClient.ts` — mock-mode console banner, tolerant `getStudents` parsing
+- `src/lib/mocks.ts` — prod-import guard + dev-only comment
 
 **Backend**
-- `server/models/Response.js`: add `isDraft: { type: Boolean, default: false }` and make `answers` allow partial saves (loosen validation when draft).
-- `server/routes/responses.js`:
-  - `PATCH /draft` — upsert `{ userId, isDraft: true, answers }`.
-  - `GET /draft` — return current draft for the logged-in student.
-  - Update existing `POST /submit`: when finalizing, set `isDraft: false`; if a draft exists for the user, overwrite it instead of 409-ing.
-- `apiClient.ts`: add `getDraft()`, `saveDraft(answers)`.
+- `server/routes/admin.js` — debug log on GET /students
+- `server/scripts/seed.js` — optional `--with-demo-students` flag
 
----
+**Docs**
+- `RUN_LOCALLY.md` — note about `VITE_USE_MOCKS` env var on Vercel
 
-### Change 2: Student Name + Avatar in Header
-
-- New shared component `src/components/UserBadge.tsx`:
-  - Avatar circle (gold initials on dark navy bg). Initials = first letter of first + last name; if single name → first 2 letters.
-  - Renders `name` + `[Logout]` button.
-- Use in:
-  - `src/pages/Assessment.tsx` header (replaces "Save & exit" link area).
-  - `src/pages/Results.tsx` header.
-  - `src/pages/admin/AdminLayout.tsx` top header — show "Admin" with shield icon + initials.
-- Pulls `user.name` from `useAuth()` (already in context). No backend change needed.
-
----
-
-### Change 3: Dark / Light Theme Toggle
-
-- `index.html`: add inline pre-React script that reads `localStorage.steps_theme` (default `dark`) and sets `data-theme` on `<html>`.
-- `src/index.css`: convert the `:root` block into `[data-theme="dark"] { ... }` (keeping existing HSL tokens) and add a parallel `[data-theme="light"] { ... }` block with light navy/cream tokens that map to the same token names (`--background`, `--foreground`, `--card`, `--border`, `--primary`, etc.) so all existing Tailwind classes auto-switch.
-- New `src/hooks/useTheme.ts`: read/write `steps_theme`, toggle `data-theme` attribute.
-- New `src/components/ThemeToggle.tsx`: sun/moon button (lucide `Sun`/`Moon`), placed inside `UserBadge` (so it appears next to name on every page).
-
----
-
-### Change 4: Admin System Status + Gemini Rate-Limit Queue
-
-**New admin page** `src/pages/admin/SystemStatus.tsx` at route `/admin/system`:
-- Sidebar nav entry with pulsing dot (green = all healthy, red = any failing).
-- On load, calls `GET /api/health/full` and renders rows for: Mongo Admin DB, Mongo Students DB, Gemini 2.5 Pro, Gemini 2.5 Flash (search grounding), JWT Auth, Backend API. Each row shows status, response time ms, extra detail (model name / token expiry / uptime).
-- Static "Gemini API Usage Limits (Free Tier)" panel listing the RPM/RPD/TPM table from the spec + the explanatory note about 1 Pro + 6 Flash per submission.
-
-**Backend new endpoints**
-- `GET /api/health` → `{ status: "ok", uptime: process.uptime() }` (public).
-- `GET /api/health/full` (admin JWT) → runs all 6 checks in parallel with timing:
-  - Admin DB: `AdminAccount.countDocuments()`
-  - Students DB: `Result.countDocuments()`
-  - Gemini Pro: minimal `"Reply with the word OK only"` prompt
-  - Gemini Flash with `tools: [{ googleSearch: {} }]`
-  - JWT: decode caller's token, return expiry
-  - API: returns own uptime
-- `GET /api/results/queue-status` → `{ position, isProcessing }` for the calling user.
-
-**Queue in `server/services/resultService.js`**
-- Add the in-memory FIFO queue exactly as specified: `queuedGenerate(userId)`, 35s gap between jobs, single concurrency.
-- Track per-user position so `queue-status` can answer.
-- Update `server/routes/responses.js` and `server/routes/results.js` to call `queuedGenerate` instead of `generateResultForUser` directly.
-
-**Frontend wait UX (`Assessment.tsx` submit overlay)**
-- Replace current overlay with: "Analysing your profile with AI… This may take up to 60 seconds." + spinner.
-- After submit, poll `GET /api/results/queue-status` every 5s; if `position > 0` show "You are number X in the queue. Please wait…". When result returns from submit promise, navigate to `/results`.
-
----
-
-### Files to be created
-- `src/components/UserBadge.tsx`, `src/components/ThemeToggle.tsx`
-- `src/hooks/useTheme.ts`
-- `src/pages/admin/SystemStatus.tsx`
-- `server/routes/health.js`
-
-### Files to be edited
-- `src/App.tsx` (add `/admin/system` route)
-- `src/pages/Assessment.tsx`, `src/pages/Results.tsx`, `src/pages/admin/AdminLayout.tsx`
-- `src/lib/apiClient.ts`, `src/lib/types.ts`
-- `src/index.css`, `index.html`
-- `server/index.js` (mount health route)
-- `server/models/Response.js` (add `isDraft`)
-- `server/routes/responses.js`, `server/routes/results.js`
-- `server/services/resultService.js` (queue)
-
-### Notes / assumptions
-- Mock mode (`USING_MOCKS`) will simulate draft save/load and queue-status with no-op + `position: 0` so the preview keeps working without the backend.
-- Light theme will reuse existing token names so no component-level color rewrites are required; only `index.css` changes.
-- Queue is in-process memory only — restarting the Node server clears it (acceptable for current scope).
+## Notes
+- I will **not** change `server/data/questionBank.js` — it is correct.
+- I will **not** restructure the API response shape; only add tolerance on the client.
+- The `key={q._id}` fix is the primary fix for Bug 1; everything else is hardening so the same class of bug cannot reappear.

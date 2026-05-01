@@ -39,6 +39,11 @@ const Assessment = () => {
       return;
     }
     apiClient.getQuestions().then((qs) => {
+      if (!Array.isArray(qs) || qs.some((q) => !q || !Array.isArray(q.choices))) {
+        console.error("[Assessment] Invalid questions payload from API:", qs);
+        setQuestions([]);
+        return;
+      }
       setQuestions(qs);
       const map = new Map<string, Map<string, string>>();
       qs.forEach((q) => {
@@ -47,6 +52,9 @@ const Assessment = () => {
         map.set(q._id, m);
       });
       labelByValue.current = map;
+    }).catch((err) => {
+      console.error("[Assessment] Failed to load questions:", err);
+      setQuestions([]);
     });
   }, [navigate, user]);
 
