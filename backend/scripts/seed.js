@@ -42,9 +42,9 @@ async function recreateCollections() {
 }
 
 async function seedAdmin() {
-  const password = await bcrypt.hash("admin123", 10);
+  const password = await bcrypt.hash("AdminCareerguide!123", 10);
   await AdminAccount.create({
-    username: "admin",
+    username: "Admin@careerguide",
     password,
     role: "admin",
   });
