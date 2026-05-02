@@ -4,6 +4,7 @@ const StudentAccount = require("../models/StudentAccount");
 const Result = require("../models/Result");
 const { verifyJWT, requireAdmin } = require("../middleware/auth");
 const { deleteStudent } = require("../services/studentService");
+const { validateStrictGmail } = require("../utils/gmail");
 
 router.use(verifyJWT, requireAdmin);
 
@@ -34,10 +35,15 @@ router.post("/students", async (req, res, next) => {
       return res.status(400).json({ error: "Missing fields" });
     }
 
+    const gmail = validateStrictGmail(email);
+    if (!gmail.ok) {
+      return res.status(400).json({ error: gmail.error });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const student = await StudentAccount.create({
       name,
-      email: String(email).toLowerCase().trim(),
+      email: gmail.normalized,
       password: hashedPassword,
       role: "student",
       status: "pending",

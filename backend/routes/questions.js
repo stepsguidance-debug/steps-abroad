@@ -1,11 +1,12 @@
 const router = require("express").Router();
 const Question = require("../models/Question");
 const { verifyJWT, requireAdmin } = require("../middleware/auth");
-const { createQuestion, deleteQuestion, deleteQuestionOption } = require("../services/questionService");
+const { createQuestion, deleteQuestion, deleteQuestionOption, sanitizeLeanQuestion } = require("../services/questionService");
 
 router.get("/", verifyJWT, async (_req, res, next) => {
   try {
-    const questions = await Question.find().sort({ order: 1 }).lean();
+    const docs = await Question.find().sort({ order: 1 }).lean();
+    const questions = docs.map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     res.json(questions);
   } catch (error) {
     next(error);

@@ -45,6 +45,22 @@ function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+/** DELETE often returns 204 No Content — body must not be parsed as JSON. */
+async function readJsonBody<T>(res: Response): Promise<T> {
+  if (res.status === 204 || res.status === 205) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid JSON from server (${res.url || "response"}): ${text.slice(0, 200)}`);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -59,7 +75,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return readJsonBody<T>(res);
 }
 
 let mockStudents: Student[] = [...MOCK_STUDENTS];

@@ -4,6 +4,7 @@ import { GraduationCap, Mail, Lock, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { USING_MOCKS } from "@/lib/apiClient";
+import { validateStrictGmail } from "@/lib/gmail";
 
 const Login = () => {
   const [role, setRole] = useState<"admin" | "student">("student");
@@ -15,9 +16,18 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let loginEmail = email;
+    if (role === "student" && !USING_MOCKS) {
+      const gmail = validateStrictGmail(email);
+      if (!gmail.ok) {
+        toast({ title: "Invalid email", description: gmail.error, variant: "destructive" });
+        return;
+      }
+      loginEmail = gmail.normalized;
+    }
     setSubmitting(true);
     try {
-      const u = await login(email, password, role);
+      const u = await login(loginEmail, password, role);
       navigate(u.role === "admin" ? "/admin" : "/assessment", { replace: true });
     } catch (err) {
       toast({
@@ -35,7 +45,7 @@ const Login = () => {
       setEmail("admin");
       setPassword("admin123");
     } else {
-      setEmail("student@example.com");
+      setEmail("demostudent@gmail.com");
       setPassword("demo");
     }
   };
@@ -83,7 +93,7 @@ const Login = () => {
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input type={role === "admin" ? "text" : "email"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={role === "admin" ? "admin" : "you@example.com"}
+              <input type={role === "admin" ? "text" : "email"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={role === "admin" ? "admin" : "you@gmail.com"}
                 className="w-full rounded-xl border border-border bg-background/40 pl-10 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition" />
             </div>
           </div>

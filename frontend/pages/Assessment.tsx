@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ChevronLeft, ChevronRight, Sparkles, GraduationCap, RefreshCw } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
@@ -61,18 +61,89 @@ const Assessment = () => {
       navigate("/results", { replace: true });
       return;
     }
-    apiClient.getQuestions().then((qs) => {
-      if (!Array.isArray(qs) || qs.some((q) => !q || !Array.isArray(q.choices))) {
+    if (!user) return;
+
+    let cancelled = false;
+
+    const applyPayload = (qs: unknown, silent: boolean) => {
+      if (cancelled) return;
+      if (!Array.isArray(qs)) {
         console.error("[Assessment] Invalid questions payload from API:", qs);
+        if (!silent) {
+          toast({
+            title: "Could not load assessment",
+            description: "Unexpected response from the server.",
+            variant: "destructive",
+          });
+        }
         setQuestions([]);
         return;
       }
-      setQuestions(qs);
-    }).catch((err) => {
-      console.error("[Assessment] Failed to load questions:", err);
-      setQuestions([]);
-    });
+      /** Keep playable questions even if another row in the DB is malformed (do not wipe the whole quiz). */
+      const valid = qs
+        .filter((q) => q != null && typeof q === "object")
+        .map((q) => ({
+          ...(q as Question),
+          choices: Array.isArray((q as Question).choices) ? (q as Question).choices : [],
+        }))
+        .filter((q) => Boolean(q._id && q.questionText && q.choices.length >= 2));
+      const dropped = qs.filter(Boolean).length - valid.length;
+      if (dropped > 0 && !silent) {
+        toast({
+          title: `${dropped} question(s) were skipped`,
+          description: "Each item needs at least two options with labels. Fix those entries in Question Bank.",
+          variant: "destructive",
+        });
+      }
+      if (valid.length === 0) {
+        if (!silent) {
+          toast({
+            title: "No questions available",
+            description: "Add questions with options in Question Bank.",
+            variant: "destructive",
+          });
+        }
+        setQuestions([]);
+        return;
+      }
+      valid.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      setQuestions(valid);
+    };
+
+    const load = (silent: boolean) => {
+      apiClient
+        .getQuestions()
+        .then((qs) => applyPayload(qs, silent))
+        .catch((err) => {
+          console.error("[Assessment] Failed to load questions:", err);
+          if (!silent) {
+            toast({
+              title: "Failed to load questions",
+              description: err instanceof Error ? err.message : "Check your connection and try again.",
+              variant: "destructive",
+            });
+            setQuestions([]);
+          }
+        });
+    };
+
+    load(false);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [navigate, user]);
+
+  /** If the question list shrinks (e.g. admin deleted items), keep index in range. */
+  useEffect(() => {
+    if (!questions.length) return;
+    setIdx((i) => Math.min(i, questions.length - 1));
+  }, [questions.length]);
 
   // Hydrate from localStorage / server draft once questions are loaded
   useEffect(() => {

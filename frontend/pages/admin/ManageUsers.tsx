@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/apiClient";
+import { downloadResultDashboardPdf } from "@/lib/resultPdfExport";
+import { validateStrictGmail } from "@/lib/gmail";
 import type { Student } from "@/lib/types";
 
 const ManageUsers = () => {
@@ -46,9 +48,15 @@ const ManageUsers = () => {
       return;
     }
 
+    const gmail = validateStrictGmail(form.email);
+    if (!gmail.ok) {
+      toast({ title: "Invalid email", description: gmail.error, variant: "destructive" });
+      return;
+    }
+
     try {
       setCreating(true);
-      await apiClient.addStudent(form);
+      await apiClient.addStudent({ ...form, email: gmail.normalized });
       await refresh();
       toast({ title: "Student added" });
       setForm({ name: "", email: "", password: "" });
@@ -83,12 +91,32 @@ const ManageUsers = () => {
     }
   };
 
+  const downloadPdf = async (s: Student) => {
+    try {
+      const data = await apiClient.getResult(s._id);
+      if (!data) {
+        toast({ title: "No result to export", variant: "destructive" });
+        return;
+      }
+      await downloadResultDashboardPdf(data);
+      toast({ title: "PDF downloaded" });
+    } catch (err) {
+      toast({
+        title: "Could not download PDF",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-2xl font-bold">Manage Users</h2>
-          <p className="text-sm text-muted-foreground">Add, view and remove student accounts.</p>
+          <p className="text-sm text-muted-foreground">
+            Add, view and remove student accounts. Student email must be a valid <span className="font-medium text-foreground">@gmail.com</span> address.
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -99,7 +127,10 @@ const ManageUsers = () => {
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-3">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                <div>
+                  <Label>Email (@gmail.com only)</Label>
+                  <Input type="email" autoComplete="off" placeholder="name@gmail.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </div>
                 <div><Label>Temporary password</Label><Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
               </div>
               <DialogFooter>
@@ -135,6 +166,7 @@ const ManageUsers = () => {
               <th className="px-5 py-3">Email</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3 text-right">AI Readiness</th>
+              <th className="px-5 py-3 text-right">PDF</th>
               <th className="px-5 py-3"></th>
             </tr>
           </thead>
@@ -145,6 +177,16 @@ const ManageUsers = () => {
                 <td className="px-5 py-3 text-muted-foreground">{s.email}</td>
                 <td className="px-5 py-3 capitalize">{s.status.replace("_", " ")}</td>
                 <td className="px-5 py-3 text-right">{s.aiReadiness != null ? `${s.aiReadiness}%` : "—"}</td>
+                <td className="px-5 py-3 text-right">
+                  {s.status === "answered" ? (
+                    <Button variant="outline" size="sm" className="gap-1" title="Download result PDF" onClick={() => void downloadPdf(s)}>
+                      <Download className="h-4 w-4" />
+                      PDF
+                    </Button>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
                 <td className="px-5 py-3 text-right">
                   <Button variant="ghost" size="icon" onClick={() => setToDelete(s)}>
                     <Trash2 className="h-4 w-4 text-destructive" />

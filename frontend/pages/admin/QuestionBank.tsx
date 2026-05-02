@@ -42,6 +42,9 @@ const QuestionBank = () => {
       group.items.push(question);
       map.set(question.section, group);
     });
+    map.forEach((g) => {
+      g.items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [questions]);
 
@@ -58,13 +61,23 @@ const QuestionBank = () => {
     setForm((prev) => ({ ...prev, choices: [...prev.choices, emptyChoice()] }));
   };
 
+  const slug = (label: string) =>
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
   const createQuestion = async () => {
     await apiClient.addQuestion({
       ...form,
-      choices: form.choices.map((choice) => ({
-        ...choice,
-        value: choice.value || choice.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""),
-      })),
+      choices: form.choices.map((choice, index) => {
+        const v = choice.value.trim();
+        const slugged = slug(choice.label);
+        return {
+          ...choice,
+          value: v || (slugged ? `${slugged}_${index + 1}` : `option_${index + 1}`),
+        };
+      }),
     });
     toast({ title: "Question created" });
     setOpen(false);
@@ -73,15 +86,31 @@ const QuestionBank = () => {
   };
 
   const removeQuestion = async (questionId: string) => {
-    await apiClient.deleteQuestion(questionId);
-    toast({ title: "Question deleted" });
-    refresh();
+    try {
+      await apiClient.deleteQuestion(questionId);
+      toast({ title: "Question deleted" });
+      refresh();
+    } catch (error) {
+      toast({
+        title: "Could not delete question",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const removeOption = async (questionId: string, optionValue: string) => {
-    await apiClient.deleteQuestionOption(questionId, optionValue);
-    toast({ title: "Option deleted" });
-    refresh();
+    try {
+      await apiClient.deleteQuestionOption(questionId, optionValue);
+      toast({ title: "Option deleted" });
+      refresh();
+    } catch (error) {
+      toast({
+        title: "Could not remove option",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -212,8 +241,8 @@ const QuestionBank = () => {
                       </div>
 
                       <div className="space-y-2">
-                        {question.choices.map((choice) => (
-                          <div key={choice.value} className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                        {question.choices.map((choice, ix) => (
+                          <div key={`${choice.value}-${ix}`} className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                               <p className="text-sm">{choice.label}</p>
                               {choice.allowCustomInput && (

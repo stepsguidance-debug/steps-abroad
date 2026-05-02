@@ -4,6 +4,7 @@ const Response = require("../models/Response");
 const StudentAccount = require("../models/StudentAccount");
 const { verifyJWT } = require("../middleware/auth");
 const { queuedGenerate } = require("../services/resultService");
+const { sanitizeLeanQuestion } = require("../services/questionService");
 
 // Save partial draft progress
 router.patch("/draft", verifyJWT, async (req, res, next) => {
@@ -13,7 +14,7 @@ router.patch("/draft", verifyJWT, async (req, res, next) => {
     const { answers } = req.body;
     if (!Array.isArray(answers)) return res.status(400).json({ error: "answers must be an array" });
 
-    const questions = await Question.find().lean();
+    const questions = (await Question.find().lean()).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     const questionMap = new Map(questions.map((q) => [String(q._id), q]));
 
     const normalized = [];
@@ -84,7 +85,7 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
       return res.status(400).json({ error: "No answers provided" });
     }
 
-    const questions = await Question.find().lean();
+    const questions = (await Question.find().lean()).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     if (answers.length !== questions.length) {
       return res.status(400).json({ error: `Expected ${questions.length} answers` });
     }

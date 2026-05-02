@@ -4,13 +4,22 @@ const jwt = require("jsonwebtoken");
 const AdminAccount = require("../models/AdminAccount");
 const StudentAccount = require("../models/StudentAccount");
 const { serializeUser } = require("../middleware/auth");
+const { validateStrictGmail } = require("../utils/gmail");
 
 router.post("/login", async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
-    const identifier = String(email || "").trim().toLowerCase();
+    let identifier = String(email || "").trim().toLowerCase();
     if (!identifier || !password || !role) {
       return res.status(400).json({ error: "Missing credentials" });
+    }
+
+    if (role === "student") {
+      const gmail = validateStrictGmail(identifier);
+      if (!gmail.ok) {
+        return res.status(400).json({ error: gmail.error });
+      }
+      identifier = gmail.normalized;
     }
 
     const Model = role === "admin" ? AdminAccount : StudentAccount;

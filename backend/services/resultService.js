@@ -405,6 +405,7 @@ const Question = require("../models/Question");
 const Response = require("../models/Response");
 const Result = require("../models/Result");
 const StudentAccount = require("../models/StudentAccount");
+const { sanitizeLeanQuestion } = require("./questionService");
 
 const EDUCATION_LEVEL_QUESTION = "What is your highest completed qualification?";
 
@@ -688,11 +689,12 @@ async function enrichJobRoles(careerFit) {
 // ─── Main export ────────────────────────────────────────────────────────────
 
 async function generateResultForUser(userId) {
-  const [student, latestResponse, questions] = await Promise.all([
+  const [student, latestResponse, questionsRaw] = await Promise.all([
     StudentAccount.findById(userId),
     Response.findOne({ userId }).sort({ submittedAt: -1 }).lean(),
     Question.find().sort({ order: 1 }).lean(),
   ]);
+  const questions = (questionsRaw || []).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
 
   if (!student) {
     const error = new Error("Student not found");

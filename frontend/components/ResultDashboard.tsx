@@ -1,16 +1,8 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AiRisk, CareerFitItem, RejectedCareer, Result } from "@/lib/types";
-
-const SECTION_TITLES: Record<string, string> = {
-  A: "Academic & Cognitive Signals",
-  B: "Behaviour & Work Style",
-  C: "Exposure & Awareness",
-  D: "Risk, Ambition & Constraints",
-  E: "AI Awareness & Adaptability",
-  F: "Motivation & Internal Drivers",
-  G: "Constraints & Reality",
-};
+import { SECTION_TITLES } from "@/lib/sectionTitles";
+import { buildTraitDonutSlices } from "@/lib/traitDonutPaths";
 
 const RISK_META: Record<AiRisk, { dot: string; label: string; ring: string }> = {
   safe: { dot: "bg-success", label: "AI-resilient", ring: "border-success/40" },
@@ -109,13 +101,45 @@ const ReadinessBadge = ({ score }: { score: number }) => {
   );
 };
 
-interface Props {
-  result: Result;
+/** Matches default Recharts cell order when exporting from the browser. */
+const TRAIT_PIE_FILLS_EXPORT = ["#F5A623", "#FFD666", "#22C55E", "#F5A623"];
+
+function TraitDistributionDonutSvg({
+  data,
+  colors,
+}: {
+  data: { name: string; value: number }[];
+  colors: string[];
+}) {
+  const size = 176;
+  const paths = buildTraitDonutSlices(data, colors, size);
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="mx-auto block shrink-0"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      {paths.map((p) => (
+        <path key={p.key} d={p.path} fill={p.fill} stroke="#0f1a42" strokeWidth={2} strokeLinejoin="round" />
+      ))}
+    </svg>
+  );
 }
 
-const ResultDashboard = ({ result }: Props) => {
+interface Props {
+  result: Result;
+  /** Legacy PNG export preview (same donut as react-pdf). Kept for optional future use; PDF is vector-only now. */
+  forPdfExport?: boolean;
+}
+
+const ResultDashboard = ({ result, forPdfExport = false }: Props) => {
   const traitData = Object.entries(result.traitScores).map(([name, value]) => ({ name, value }));
-  const colors = ["hsl(var(--primary))", "hsl(var(--primary-glow))", "hsl(var(--success))", "hsl(var(--accent))"];
+  const colors = forPdfExport
+    ? TRAIT_PIE_FILLS_EXPORT
+    : ["hsl(var(--primary))", "hsl(var(--primary-glow))", "hsl(var(--success))", "hsl(var(--accent))"];
 
   return (
     <div className="space-y-8">
@@ -144,15 +168,21 @@ const ResultDashboard = ({ result }: Props) => {
         </div>
         <div className="glass-card p-4">
           <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Trait distribution</p>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={traitData} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={3}>
-                  {traitData.map((_, index) => <Cell key={index} fill={colors[index % colors.length]} />)}
-                </Pie>
-                <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className={`h-44 flex items-center justify-center ${forPdfExport ? "min-h-[176px]" : ""}`}>
+            {forPdfExport ? (
+              <TraitDistributionDonutSvg data={traitData} colors={colors} />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={traitData} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={3}>
+                    {traitData.map((_, index) => <Cell key={index} fill={colors[index % colors.length]} />)}
+                  </Pie>
+                  <RTooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </section>

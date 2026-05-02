@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import { Users, CheckCircle2, Clock, Sparkles, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/apiClient";
+import { downloadResultDashboardPdf } from "@/lib/resultPdfExport";
 import type { Student } from "@/lib/types";
 
 const StatCard = ({ icon: Icon, label, value, accent }: { icon: typeof Users; label: string; value: string | number; accent?: boolean }) => (
@@ -39,6 +42,24 @@ const Overview = () => {
     ? Math.round(completedScores.reduce((a, b) => a + b, 0) / completedScores.length)
     : 0;
 
+  const downloadPdf = async (s: Student) => {
+    try {
+      const data = await apiClient.getResult(s._id);
+      if (!data) {
+        toast({ title: "No result to export", variant: "destructive" });
+        return;
+      }
+      await downloadResultDashboardPdf(data);
+      toast({ title: "PDF downloaded" });
+    } catch (err) {
+      toast({
+        title: "Could not download PDF",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -56,13 +77,14 @@ const Overview = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {students.map((s) => {
               const initials = s.name.split(" ").map((n) => n[0]).slice(0, 2).join("");
-              const card = (
-                <div className="glass-card p-5 hover:-translate-y-0.5 transition-transform">
+              const showPdf = s.status === "answered";
+              const cardInner = (
+                <>
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full btn-gold flex items-center justify-center font-bold">
                       {initials}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 pr-14">
                       <p className="font-semibold truncate">{s.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{s.email}</p>
                     </div>
@@ -75,12 +97,32 @@ const Overview = () => {
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </div>
-                </div>
+                </>
               );
               return s.status === "answered" ? (
-                <Link key={s._id} to={`/admin/results/${s._id}`}>{card}</Link>
+                <div key={s._id} className="glass-card p-5 hover:-translate-y-0.5 transition-transform relative">
+                  <Link to={`/admin/results/${s._id}`} className="block">{cardInner}</Link>
+                  {showPdf ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="absolute top-4 right-4 gap-1 shadow-sm"
+                      title="Download result as PDF"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void downloadPdf(s);
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                      PDF
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
-                <div key={s._id}>{card}</div>
+                <div key={s._id} className="glass-card p-5">
+                  {cardInner}
+                </div>
               );
             })}
           </div>

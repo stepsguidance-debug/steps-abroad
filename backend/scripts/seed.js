@@ -59,9 +59,9 @@ async function seedQuestions() {
 async function seedDemoStudents() {
   const password = await bcrypt.hash("demo123", 10);
   const demos = [
-    { name: "Aarav Sharma", email: "aarav@example.com" },
-    { name: "Diya Patel", email: "diya@example.com" },
-    { name: "Rohan Verma", email: "rohan@example.com" },
+    { name: "Aarav Sharma", email: "aarav.demo@gmail.com" },
+    { name: "Diya Patel", email: "diya.demo@gmail.com" },
+    { name: "Rohan Verma", email: "rohan.demo@gmail.com" },
   ];
   await StudentAccount.insertMany(
     demos.map((d) => ({ ...d, password, role: "student", status: "pending" })),
