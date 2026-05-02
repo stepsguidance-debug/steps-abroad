@@ -217,4 +217,4 @@ Students always move **one question at a time** until submit.
 
 ---
 
-*End of guide. For installing or deploying the software, see `frontend/README.md` and `backend/README.md`.*
+**End of guide. For installing or deploying the software, see `frontend/README.md` and `backend/README.md`.**
