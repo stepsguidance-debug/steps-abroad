@@ -23,7 +23,7 @@ Everything sensitive (password hashing, AI keys, database) stays **here**, not i
 ## 2. Tech stack (short)
 
 - **Node.js** + **Express** — listens for HTTP requests.
-- **MongoDB** via **Mongoose** — stores admins, students, questions, responses, AI results.
+- **Firebase Firestore** via **Firebase Admin SDK** — stores admins, students, questions, responses, AI results.
 - **JWT** — signed login tokens.
 - **bcrypt** — password hashing.
 - **Google Gemini** — generates scored results and summaries.
@@ -32,16 +32,19 @@ Again, you only need these names when talking to engineers.
 
 ---
 
-## 3. How data is organised (two MongoDB databases)
+## 3. How data is organised (Firebase Firestore)
 
-One **`MONGODB_URI`** connects to Mongo, but data is split into **two database names** (see `DB_ADMIN` and `DB_STUDENTS` in `.env`):
+The application connects to **Firebase Firestore** using the Firebase Admin SDK. The data is split across several **collections**:
 
-| Database (env name) | Example name | Main collections |
-|---------------------|--------------|------------------|
-| **Admin DB** | `stepsguidance_admin` (`DB_ADMIN`) | Questions, admin accounts, **student login accounts** |
-| **Students / results DB** | `stepsguidance_students` (`DB_STUDENTS`) | Saved answers (**responses**) and generated **results** |
+| Collection | Role |
+|---------------------|------------------|
+| **`admin_accounts`** | Admin logins |
+| **`student_accounts`** | Student logins |
+| **`questions`** | The question bank |
+| **`responses`** | Saved answers (drafts and submitted) |
+| **`results`** | AI-generated career profiles |
 
-**Plain English:** Accounts and exam content live in the “admin” database; submitted answers and AI results live in the “students” database.
+**Plain English:** Accounts and exam content live in the collections for admins, students, and questions; submitted answers and AI results live in their respective collections.
 
 ---
 
@@ -52,7 +55,7 @@ One **`MONGODB_URI`** connects to Mongo, but data is split into **two database n
 | `index.js` | Starts Express, CORS, routes, database bootstrap. |
 | `routes/` | URL groups: `auth`, `admin`, `questions`, `responses`, `results`, `health`. |
 | `services/` | Business logic: questions (create/order/sanitize), students delete, **result generation** (Gemini). |
-| `models/` | Mongo schemas (shape of each collection). |
+| `models/` | Firestore data access helpers (DAOs). |
 | `middleware/` | JWT check, “admin only” guard. |
 | `data/` | Seed question text and section titles (`questionBank.js`). |
 | `scripts/seed.js` | Fills database with starter questions (**destructive reset** — use only when you intend to). |
@@ -105,7 +108,7 @@ After a successful submit:
 ### Requirements
 
 - **Node.js** (LTS)
-- **MongoDB** running and reachable (`MONGODB_URI`)
+- **Firebase project** with Firestore enabled
 
 ### Setup
 
@@ -115,7 +118,7 @@ From this `backend/` folder:
 npm install
 ```
 
-Copy `.env.example` → `.env` and fill **Mongo URI**, **JWT_SECRET**, **Gemini key**, **PORT**, and **FRONTEND_URL** / **CLIENT_ORIGIN** for CORS.
+Copy `.env.example` → `.env` and fill **FIREBASE_PROJECT_ID**, **FIREBASE_CLIENT_EMAIL**, **FIREBASE_PRIVATE_KEY**, **JWT_SECRET**, **Gemini key**, **PORT**, and **FRONTEND_URL** / **CLIENT_ORIGIN** for CORS.
 
 ```bash
 npm run dev
@@ -145,7 +148,7 @@ Use `.env.example` as the checklist. High level:
 
 | Topic | Examples | Plain meaning |
 |-------|----------|----------------|
-| Database | `MONGODB_URI`, `DB_ADMIN`, `DB_STUDENTS` | Where Mongo lives and database names |
+| Database | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Firebase Admin credentials |
 | Security | `JWT_SECRET`, `JWT_EXPIRES_IN` | Sign login tokens; change secret in production |
 | Server | `PORT`, `NODE_ENV` | Which port listens; dev vs production behaviour |
 | CORS | `FRONTEND_URL`, `CLIENT_ORIGIN` | Which website origins may call the API from a browser |

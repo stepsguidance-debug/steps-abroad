@@ -23,8 +23,10 @@ router.post("/login", async (req, res, next) => {
     }
 
     const Model = role === "admin" ? AdminAccount : StudentAccount;
-    const query = role === "admin" ? { username: identifier } : { email: identifier };
-    const user = await Model.findOne(query);
+    const queryField = role === "admin" ? "username" : "email";
+    const snap = await Model.collection().where(queryField, "==", identifier).limit(1).get();
+    const user = snap.empty ? null : { _id: snap.docs[0].id, ...snap.docs[0].data() };
+    
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = await bcrypt.compare(password, user.password);

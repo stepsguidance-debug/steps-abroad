@@ -1,6 +1,6 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 const bcrypt = require("bcryptjs");
-const { connectDatabases, disconnectDatabases, adminConnection, studentConnection } = require("../db");
+const { connectDatabases, getDb } = require("../db");
 const AdminAccount = require("../models/AdminAccount");
 const StudentAccount = require("../models/StudentAccount");
 const Question = require("../models/Question");
@@ -8,51 +8,50 @@ const Response = require("../models/Response");
 const Result = require("../models/Result");
 const { getSeedQuestions } = require("../data/questionBank");
 
-async function dropCollectionIfExists(connection, name) {
-  const exists = (await connection.db.listCollections({ name }).toArray()).length > 0;
-  if (exists) {
-    await connection.dropCollection(name);
+async function dropCollectionIfExists(collectionName) {
+  const db = getDb();
+  const snapshot = await db.collection(collectionName).get();
+  
+  // Note: For very large collections this batch could exceed the 500 operation limit,
+  // but for seeding purposes this is sufficient.
+  if (snapshot.docs.length > 0) {
+    const batch = db.batch();
+    snapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
   }
 }
 
 async function recreateCollections() {
   await Promise.all([
-    dropCollectionIfExists(adminConnection, "admin_accounts"),
-    dropCollectionIfExists(adminConnection, "student_accounts"),
-    dropCollectionIfExists(adminConnection, "questions"),
-    dropCollectionIfExists(studentConnection, "responses"),
-    dropCollectionIfExists(studentConnection, "results"),
-  ]);
-
-  await Promise.all([
-    AdminAccount.createCollection(),
-    StudentAccount.createCollection(),
-    Question.createCollection(),
-    Response.createCollection(),
-    Result.createCollection(),
-  ]);
-
-  await Promise.all([
-    AdminAccount.syncIndexes(),
-    StudentAccount.syncIndexes(),
-    Question.syncIndexes(),
-    Response.syncIndexes(),
-    Result.syncIndexes(),
+    dropCollectionIfExists("admin_accounts"),
+    dropCollectionIfExists("student_accounts"),
+    dropCollectionIfExists("questions"),
+    dropCollectionIfExists("responses"),
+    dropCollectionIfExists("results"),
   ]);
 }
 
 async function seedAdmin() {
   const password = await bcrypt.hash("AdminCareerguide!123", 10);
-  await AdminAccount.create({
-    username: "Admin@careerguide",
+  await AdminAccount.collection().add({
+    username: "admin@careerguide",
     password,
     role: "admin",
+    createdAt: new Date()
   });
 }
 
 async function seedQuestions() {
   const questions = getSeedQuestions();
-  await Question.insertMany(questions);
+  const batch = getDb().batch();
+  questions.forEach(q => {
+    if (!q.createdAt) q.createdAt = new Date();
+    const ref = Question.collection().doc();
+    batch.set(ref, q);
+  });
+  await batch.commit();
   return questions;
 }
 
@@ -63,29 +62,36 @@ async function seedDemoStudents() {
     { name: "Diya Patel", email: "diya.demo@gmail.com" },
     { name: "Rohan Verma", email: "rohan.demo@gmail.com" },
   ];
-  await StudentAccount.insertMany(
-    demos.map((d) => ({ ...d, password, role: "student", status: "pending" })),
-  );
+  const batch = getDb().batch();
+  demos.forEach(d => {
+    const ref = StudentAccount.collection().doc();
+    batch.set(ref, { ...d, password, role: "student", status: "pending", createdAt: new Date() });
+  });
+  await batch.commit();
   return demos.length;
 }
 
 (async () => {
   const withDemoStudents = process.argv.includes("--with-demo-students");
   await connectDatabases();
+  
+  console.log("Clearing existing collections...");
   await recreateCollections();
+  
+  console.log("Seeding data...");
   await seedAdmin();
   const seededQuestions = await seedQuestions();
   const demoStudentCount = withDemoStudents ? await seedDemoStudents() : 0;
 
   const counts = {
-    admin_accounts: await AdminAccount.countDocuments(),
-    student_accounts: await StudentAccount.countDocuments(),
-    questions: await Question.countDocuments(),
-    responses: await Response.countDocuments(),
-    results: await Result.countDocuments(),
+    admin_accounts: (await AdminAccount.collection().count().get()).data().count,
+    student_accounts: (await StudentAccount.collection().count().get()).data().count,
+    questions: (await Question.collection().count().get()).data().count,
+    responses: (await Response.collection().count().get()).data().count,
+    results: (await Result.collection().count().get()).data().count,
   };
 
-  console.log("Databases created: stepsguidance_admin, stepsguidance_students");
+  console.log("Databases created: Firebase Firestore");
   console.log(`admin_accounts: ${counts.admin_accounts}`);
   console.log(`student_accounts: ${counts.student_accounts}`);
   console.log(`questions: ${counts.questions}`);
@@ -102,9 +108,8 @@ async function seedDemoStudents() {
     console.log(`Confirmed ${demoStudentCount} demo student accounts seeded (password: demo123)`);
   }
 
-  await disconnectDatabases();
-})().catch(async (error) => {
+  process.exit(0);
+})().catch(error => {
   console.error(error);
-  await disconnectDatabases().catch(() => {});
   process.exit(1);
 });

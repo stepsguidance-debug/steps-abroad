@@ -1,69 +1,43 @@
-const mongoose = require("mongoose");
+const { initializeApp, getApps, applicationDefault, cert } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 
-function withDatabaseName(baseUri, dbName) {
-  const [beforeQuery, query = ""] = baseUri.split("?");
-  const normalized = beforeQuery.endsWith("/") ? beforeQuery.slice(0, -1) : beforeQuery;
-  return `${normalized}/${dbName}${query ? `?${query}` : ""}`;
-}
-
-const adminDbName = process.env.DB_ADMIN || "stepsguidance_admin";
-const studentDbName = process.env.DB_STUDENTS || "stepsguidance_students";
-
-function resolveBaseUri() {
-  return process.env.MONGODB_URI;
-}
-
-const adminConnection = mongoose.createConnection();
-const studentConnection = mongoose.createConnection();
-
-async function openBothConnections(baseUri) {
-  const adminUri = withDatabaseName(baseUri, adminDbName);
-  const studentUri = withDatabaseName(baseUri, studentDbName);
-
-  await Promise.all([
-    adminConnection.readyState === 1 ? Promise.resolve() : adminConnection.openUri(adminUri),
-    studentConnection.readyState === 1 ? Promise.resolve() : studentConnection.openUri(studentUri),
-  ]);
-  return { adminUri, studentUri };
-}
+let db;
 
 async function connectDatabases() {
-  const baseUri = resolveBaseUri();
-
-  if (!baseUri) {
-    throw new Error("MONGODB_URI is required in backend/.env");
-  }
-
-  try {
-    await openBothConnections(baseUri);
-  } catch (err) {
-    const msg = err?.message || String(err);
-    if (process.env.NODE_ENV !== "production" && msg.includes("ECONNREFUSED")) {
-      const hint = [
-        "MongoDB is not reachable on the configured host.",
-        "Fix by either:",
-        "1) Start your MongoDB instance, OR",
-        "2) Set MONGODB_URI in backend/.env to a valid connection string.",
-      ].join(" ");
-      const e = new Error(`${hint} Original error: ${msg}`);
-      e.cause = err;
-      throw e;
+  if (getApps().length === 0) {
+    if (process.env.FIREBASE_PRIVATE_KEY) {
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        })
+      });
+    } else {
+      initializeApp({
+        credential: applicationDefault(),
+        projectId: process.env.FIREBASE_PROJECT_ID || "steps-guidance-demo",
+      });
     }
-    throw err;
   }
-
-  return { admin: adminConnection.name, students: studentConnection.name };
+  db = getFirestore();
+  console.log("Firebase Firestore connected.");
+  return { db };
 }
 
 async function disconnectDatabases() {
-  await Promise.all([adminConnection.close(), studentConnection.close()]);
+  return Promise.resolve();
+}
+
+function getDb() {
+  if (!db) {
+    db = getFirestore();
+  }
+  return db;
 }
 
 module.exports = {
-  adminConnection,
-  studentConnection,
-  adminDbName,
-  studentDbName,
   connectDatabases,
   disconnectDatabases,
+  getDb
 };

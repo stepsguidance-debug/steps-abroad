@@ -141,12 +141,12 @@ router.get("/full", verifyHealthAdminJWT, async (req, res) => {
 
   const [adminDb, studentsDb, geminiPro, geminiFlash, jwtCheck] = await Promise.all([
     timed(async () => {
-      const count = await AdminAccount.countDocuments();
-      return `${adminDbName} · admin_accounts: ${count}`;
+      const countSnap = await AdminAccount.collection().count().get();
+      return `Firestore · admin_accounts: ${countSnap.data().count}`;
     }),
     timed(async () => {
-      const count = await Result.countDocuments();
-      return `${studentDbName} · results: ${count}`;
+      const countSnap = await Result.collection().count().get();
+      return `Firestore · results: ${countSnap.data().count}`;
     }),
     checkGeminiProWithFallback(),
     timed(async () => {
@@ -165,8 +165,8 @@ router.get("/full", verifyHealthAdminJWT, async (req, res) => {
   ]);
 
   const checks = [
-    normalizeCheck({ name: "MongoDB Admin DB", ...adminDb }),
-    normalizeCheck({ name: "MongoDB Students DB", ...studentsDb }),
+    normalizeCheck({ name: "Firestore Admin DB", ...adminDb }),
+    normalizeCheck({ name: "Firestore Students DB", ...studentsDb }),
     {
       name: geminiPro.replaced
         ? `Gemini Pro (${GEMINI_MODEL_PRO}) -> ${geminiPro.activeModel}`

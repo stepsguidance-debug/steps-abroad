@@ -97,8 +97,8 @@ steps-abroad/
 | Runtime | Node.js via **Bun** |
 | Framework | Express.js or Hono (lightweight, Bun-compatible) |
 | Authentication | JWT (JSON Web Tokens) |
-| Database | PostgreSQL or Supabase (inferred from system status checks) |
-| ORM / query | Prisma or Drizzle |
+| Database | **Firebase Firestore** (NoSQL) |
+| ORM / query | **Firebase Admin SDK** |
 | AI integration | OpenAI API (GPT-4) or Anthropic Claude API |
 | PDF generation | Puppeteer or `pdf-lib` |
 
@@ -128,8 +128,8 @@ steps-abroad/
 │              ▼            ▼            ▼                         │
 │        ┌──────────┐ ┌──────────┐ ┌──────────┐                  │
 │        │ Database │ │ AI API   │ │ PDF Gen  │                   │
-│        │ (Postgres│ │(OpenAI / │ │(Puppeteer│                   │
-│        │ /Supabase│ │ Claude)  │ │/ pdf-lib)│                   │
+│        │(Firestore│ │(OpenAI / │ │(Puppeteer│                   │
+│        │ / NoSQL) │ │ Claude)  │ │/ pdf-lib)│                   │
 │        └──────────┘ └──────────┘ └──────────┘                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -181,64 +181,55 @@ Once a student's assessment is marked `completed = true` in the database, all `G
 
 ## 6. Data Model
 
-> Approximate schema — verify against `backend/src/models/` for exact field names and types.
+> Approximate schema — verify against `backend/src/models/` for exact field names and types. Note: Firestore is schemaless, but the application enforces these structures.
 
-### `users`
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID / INT | Primary key |
-| `name` | VARCHAR | Display name |
-| `email` | VARCHAR | Unique; must be Gmail for students |
-| `password_hash` | VARCHAR | bcrypt hashed |
-| `role` | ENUM | `student` \| `admin` |
-| `created_at` | TIMESTAMP | |
-
-### `assessment_progress`
+### `users` (admin_accounts & student_accounts)
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | UUID / INT | |
-| `user_id` | FK → users | |
-| `current_question_index` | INT | Supports resume |
-| `answers` | JSONB | `{ questionId: selectedOptionId }` |
-| `completed` | BOOLEAN | Set `true` on final submit |
-| `submitted_at` | TIMESTAMP | |
+| `Document ID` | String | Primary key |
+| `name` | String | Display name |
+| `email` | String | Unique; must be Gmail for students |
+| `password_hash` | String | bcrypt hashed |
+| `role` | String | `student` \| `admin` |
+| `created_at` | Timestamp | |
+
+### `assessment_progress` (responses)
+
+| Field | Type | Notes |
+|---|---|---|
+| `Document ID` | String | Primary key |
+| `user_id` | String | Refers to users ID |
+| `current_question_index` | Number | Supports resume |
+| `answers` | Map | `{ questionId: selectedOptionId }` |
+| `completed` | Boolean | Set `true` on final submit |
+| `submitted_at` | Timestamp | |
 
 ### `questions`
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | UUID / INT | |
-| `section` | CHAR(1) | A–G |
-| `layer` | VARCHAR | Survey depth tag |
-| `type` | ENUM | `multiple_choice` \| `forced_choice` \| `scale` |
-| `text` | TEXT | Question body |
-| `order_index` | INT | Position within section |
-| `allow_custom_answer` | BOOLEAN | Enables free-text on one option |
-
-### `question_options`
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | UUID / INT | |
-| `question_id` | FK → questions | |
-| `label` | VARCHAR | Visible text |
-| `internal_id` | VARCHAR | Optional scoring tag |
-| `hint_text` | VARCHAR | Shown when `allow_custom_answer = true` |
+| `Document ID` | String | Primary key |
+| `section` | String | A–G |
+| `layer` | String | Survey depth tag |
+| `type` | String | `multiple_choice` \| `forced_choice` \| `scale` |
+| `text` | String | Question body |
+| `order_index` | Number | Position within section |
+| `allow_custom_answer` | Boolean | Enables free-text on one option |
+| `options` | Array | Array of objects: `{ label, internal_id, hint_text }` |
 
 ### `results`
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | UUID / INT | |
-| `user_id` | FK → users | |
-| `section_scores` | JSONB | Score per section A–G |
-| `trait_scores` | JSONB | Derived trait values |
-| `ai_readiness_score` | FLOAT | |
-| `career_matches` | JSONB | Ranked career fit list |
-| `ai_summary` | TEXT | LLM-generated narrative |
-| `created_at` | TIMESTAMP | |
+| `Document ID` | String | Primary key |
+| `user_id` | String | Refers to users ID |
+| `section_scores` | Map | Score per section A–G |
+| `trait_scores` | Map | Derived trait values |
+| `ai_readiness_score` | Number | |
+| `career_matches` | Array | Ranked career fit list |
+| `ai_summary` | String | LLM-generated narrative |
+| `created_at` | Timestamp | |
 
 ---
 
@@ -383,7 +374,7 @@ The assessment progress bar (`current_question_index / total_questions * 100`) i
 |---|---|---|
 | Frontend | **Vercel** | Auto-deploys from `main` branch; env vars set in Vercel dashboard |
 | Backend | Vercel Serverless Functions **or** a separate Node/Bun host | Check `vercel.json` or `backend/README.md` for the exact config |
-| Database | Hosted PostgreSQL (Supabase / Railway / Neon) | Connection string via env var |
+| Database | **Firebase Firestore** | NoSQL database |
 | AI API | External (OpenAI / Anthropic) | API key via env var |
 
 ---
@@ -394,7 +385,9 @@ The assessment progress bar (`current_question_index / total_questions * 100`) i
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `FIREBASE_PROJECT_ID` | Your Firebase Project ID |
+| `FIREBASE_CLIENT_EMAIL` | Firebase Service Account Email |
+| `FIREBASE_PRIVATE_KEY` | Firebase Service Account Private Key |
 | `JWT_SECRET` | Secret used to sign and verify tokens |
 | `AI_PROVIDER` | `openai` or `anthropic` |
 | `OPENAI_API_KEY` | Required if `AI_PROVIDER=openai` |
@@ -416,7 +409,7 @@ The assessment progress bar (`current_question_index / total_questions * 100`) i
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.0+
-- PostgreSQL database (local or hosted)
+- Firebase Project with Firestore enabled
 - API key for chosen AI provider
 
 ### Steps
@@ -434,9 +427,9 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 # Edit both .env files with your DB URL, JWT secret, and AI key
 
-# 4. Run database migrations
+# 4. Run database seed (optional)
 cd backend
-bun run migrate     # or: bun run db:push (Prisma) / bun run drizzle-kit push
+bun run seed
 
 # 5. Start backend
 bun run dev         # runs on http://localhost:3001

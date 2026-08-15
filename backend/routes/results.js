@@ -17,10 +17,13 @@ router.get("/:userId", verifyJWT, async (req, res, next) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const [result, student] = await Promise.all([
-      Result.findOne({ userId: req.params.userId }).lean(),
-      StudentAccount.findById(req.params.userId).lean(),
+    const [resultSnap, studentDoc] = await Promise.all([
+      Result.collection().where("userId", "==", req.params.userId).limit(1).get(),
+      StudentAccount.collection().doc(req.params.userId).get(),
     ]);
+
+    const result = resultSnap.empty ? null : resultSnap.docs[0].data();
+    const student = studentDoc.exists ? studentDoc.data() : null;
 
     if (!result) return res.status(404).json({ error: "Not found" });
 

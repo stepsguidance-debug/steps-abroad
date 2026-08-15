@@ -689,11 +689,21 @@ async function enrichJobRoles(careerFit) {
 // ─── Main export ────────────────────────────────────────────────────────────
 
 async function generateResultForUser(userId) {
-  const [student, latestResponse, questionsRaw] = await Promise.all([
-    StudentAccount.findById(userId),
-    Response.findOne({ userId }).sort({ submittedAt: -1 }).lean(),
-    Question.find().sort({ order: 1 }).lean(),
-  ]);
+  const studentDoc = await StudentAccount.collection().doc(userId).get();
+  const student = studentDoc.exists ? { _id: studentDoc.id, ...studentDoc.data() } : null;
+
+  const responsesSnap = await Response.collection().where("userId", "==", userId).get();
+  let latestResponse = null;
+  if (!responsesSnap.empty) {
+    const sortedResponses = responsesSnap.docs
+      .map(doc => ({ _id: doc.id, ...doc.data() }))
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+    latestResponse = sortedResponses[0];
+  }
+
+  const questionsSnap = await Question.collection().orderBy("order").get();
+  const questionsRaw = questionsSnap.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+
   const questions = (questionsRaw || []).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
 
   if (!student) {
@@ -738,14 +748,19 @@ async function generateResultForUser(userId) {
   };
 
   // Step 5 — Save to results collection
-  const saved = await Result.findOneAndUpdate(
-    { userId: student._id },
-    resultDoc,
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();
+  const existingResultSnap = await Result.collection().where("userId", "==", student._id).limit(1).get();
+  let savedRef;
+  if (!existingResultSnap.empty) {
+    savedRef = existingResultSnap.docs[0].ref;
+    await savedRef.update(resultDoc);
+  } else {
+    savedRef = await Result.collection().add(resultDoc);
+  }
+  const savedDoc = await savedRef.get();
+  const saved = { _id: savedDoc.id, ...savedDoc.data() };
 
   // Step 6 — Update student status to answered
-  await StudentAccount.findByIdAndUpdate(student._id, { status: "answered" });
+  await StudentAccount.collection().doc(student._id).update({ status: "answered" });
 
   console.log(`\nResult saved successfully for ${student.name}`);
 

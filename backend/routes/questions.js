@@ -5,7 +5,8 @@ const { createQuestion, deleteQuestion, deleteQuestionOption, sanitizeLeanQuesti
 
 router.get("/", verifyJWT, async (_req, res, next) => {
   try {
-    const docs = await Question.find().sort({ order: 1 }).lean();
+    const snapshot = await Question.collection().orderBy("order").get();
+    const docs = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
     const questions = docs.map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     res.json(questions);
   } catch (error) {

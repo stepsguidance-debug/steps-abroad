@@ -134,25 +134,37 @@ function normalizeQuestionInput(input) {
 }
 
 async function resequenceQuestions() {
-  const questions = await Question.find().sort({ order: 1, createdAt: 1 });
-  await Promise.all(
-    questions.map((question, index) => Question.updateOne({ _id: question._id }, { order: index + 1 })),
-  );
+  const snapshot = await Question.collection().orderBy("order").orderBy("createdAt").get();
+  const batch = require("../db").getDb().batch();
+  snapshot.docs.forEach((doc, index) => {
+    batch.update(doc.ref, { order: index + 1 });
+  });
+  await batch.commit();
 }
 
 async function createQuestion(input) {
   const normalized = normalizeQuestionInput(input);
-  const sorted = await Question.find().sort({ order: 1, createdAt: 1 }).lean();
+  const snapshot = await Question.collection().orderBy("order").orderBy("createdAt").get();
+  const sorted = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+  
   const insertAt = computeInsertIndexWithinSection(normalized.section, sorted);
   const newOrderOneBased = insertAt + 1;
 
-  await Question.updateMany({ order: { $gte: newOrderOneBased } }, { $inc: { order: 1 } });
-  const created = await Question.create({ ...normalized, order: newOrderOneBased });
-  return sanitizeLeanQuestion(created.toObject());
+  const toUpdate = await Question.collection().where("order", ">=", newOrderOneBased).get();
+  const batch = require("../db").getDb().batch();
+  toUpdate.docs.forEach(doc => {
+    batch.update(doc.ref, { order: doc.data().order + 1 });
+  });
+  await batch.commit();
+  
+  const newQuestion = { ...normalized, order: newOrderOneBased, createdAt: new Date() };
+  const ref = await Question.collection().add(newQuestion);
+  const createdDoc = await ref.get();
+  return sanitizeLeanQuestion({ _id: createdDoc.id, ...createdDoc.data() });
 }
 
 async function deleteQuestion(questionId) {
-  await Question.findByIdAndDelete(questionId);
+  await Question.collection().doc(questionId).delete();
   await resequenceQuestions();
 }
 
@@ -195,12 +207,13 @@ function sanitizeLeanQuestion(doc) {
 }
 
 async function deleteQuestionOption(questionId, optionValue) {
-  const question = await Question.findById(questionId);
-  if (!question) {
+  const doc = await Question.collection().doc(questionId).get();
+  if (!doc.exists) {
     const error = new Error("Question not found");
     error.status = 404;
     throw error;
   }
+  const question = doc.data();
 
   const nextChoices = question.choices.filter((choice) => choice.value !== optionValue);
   if (nextChoices.length < 2) {
@@ -209,9 +222,8 @@ async function deleteQuestionOption(questionId, optionValue) {
     throw error;
   }
 
-  question.choices = nextChoices;
-  await question.save();
-  return question.toObject();
+  await Question.collection().doc(questionId).update({ choices: nextChoices });
+  return { _id: doc.id, ...question, choices: nextChoices };
 }
 
 module.exports = {

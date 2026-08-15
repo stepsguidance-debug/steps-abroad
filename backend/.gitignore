@@ -69,7 +69,3 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
-# Local environment files
-.env
-*.env
-backend/.env

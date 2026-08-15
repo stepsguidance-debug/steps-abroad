@@ -14,7 +14,9 @@ router.patch("/draft", verifyJWT, async (req, res, next) => {
     const { answers } = req.body;
     if (!Array.isArray(answers)) return res.status(400).json({ error: "answers must be an array" });
 
-    const questions = (await Question.find().lean()).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
+    const questionsSnap = await Question.collection().orderBy("order").get();
+    const questionsRaw = questionsSnap.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    const questions = questionsRaw.map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     const questionMap = new Map(questions.map((q) => [String(q._id), q]));
 
     const normalized = [];
@@ -32,16 +34,18 @@ router.patch("/draft", verifyJWT, async (req, res, next) => {
       });
     }
 
-    const existing = await Response.findOne({ userId: req.user._id });
+    const existingSnap = await Response.collection().where("userId", "==", req.user._id).limit(1).get();
+    const existing = existingSnap.empty ? null : existingSnap.docs[0].data();
+
     if (existing && !existing.isDraft) {
       return res.status(409).json({ error: "Assessment already submitted" });
     }
 
-    await Response.findOneAndUpdate(
-      { userId: req.user._id },
-      { userId: req.user._id, isDraft: true, answers: normalized, submittedAt: new Date() },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+    if (existingSnap.empty) {
+      await Response.collection().add({ userId: req.user._id, isDraft: true, answers: normalized, submittedAt: new Date() });
+    } else {
+      await existingSnap.docs[0].ref.update({ isDraft: true, answers: normalized, submittedAt: new Date() });
+    }
 
     res.json({ ok: true, count: normalized.length });
   } catch (error) {
@@ -53,7 +57,8 @@ router.patch("/draft", verifyJWT, async (req, res, next) => {
 router.get("/draft", verifyJWT, async (req, res, next) => {
   try {
     if (req.user.role !== "student") return res.status(403).json({ error: "Student only" });
-    const draft = await Response.findOne({ userId: req.user._id, isDraft: true }).lean();
+    const draftSnap = await Response.collection().where("userId", "==", req.user._id).where("isDraft", "==", true).limit(1).get();
+    const draft = draftSnap.empty ? null : draftSnap.docs[0].data();
     if (!draft) return res.status(404).json({ error: "No draft" });
     res.json({
       answers: draft.answers.map((a) => ({
@@ -75,7 +80,8 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
       return res.status(403).json({ error: "Student only" });
     }
 
-    const existingResponse = await Response.findOne({ userId: req.user._id }).lean();
+    const existingSnap = await Response.collection().where("userId", "==", req.user._id).limit(1).get();
+    const existingResponse = existingSnap.empty ? null : existingSnap.docs[0].data();
     if (existingResponse && existingResponse.isDraft === false) {
       return res.status(409).json({ error: "Assessment already completed. Retakes are not allowed." });
     }
@@ -85,7 +91,9 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
       return res.status(400).json({ error: "No answers provided" });
     }
 
-    const questions = (await Question.find().lean()).map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
+    const questionsSnap = await Question.collection().orderBy("order").get();
+    const questionsRaw = questionsSnap.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+    const questions = questionsRaw.map((d) => sanitizeLeanQuestion(d)).filter(Boolean);
     if (answers.length !== questions.length) {
       return res.status(400).json({ error: `Expected ${questions.length} answers` });
     }
@@ -122,12 +130,12 @@ router.post("/submit", verifyJWT, async (req, res, next) => {
       };
     });
 
-    await Response.findOneAndUpdate(
-      { userId: req.user._id },
-      { userId: req.user._id, isDraft: false, answers: normalizedAnswers, submittedAt: new Date() },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
-    await StudentAccount.findByIdAndUpdate(req.user._id, { status: "answered" });
+    if (existingSnap.empty) {
+      await Response.collection().add({ userId: req.user._id, isDraft: false, answers: normalizedAnswers, submittedAt: new Date() });
+    } else {
+      await existingSnap.docs[0].ref.update({ isDraft: false, answers: normalizedAnswers, submittedAt: new Date() });
+    }
+    await StudentAccount.collection().doc(req.user._id).update({ status: "answered" });
 
     const result = await queuedGenerate(req.user._id);
     res.json(result);
