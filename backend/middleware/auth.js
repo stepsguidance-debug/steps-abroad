@@ -31,8 +31,9 @@ async function verifyJWT(req, res, next) {
 
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const Model = payload.role === "admin" ? AdminAccount : StudentAccount;
-    const user = await Model.findById(payload.sub).lean();
-    if (!user) return res.status(401).json({ error: "Invalid token" });
+    const doc = await Model.collection().doc(payload.sub).get();
+    if (!doc.exists) return res.status(401).json({ error: "Invalid token" });
+    const user = { _id: doc.id, ...doc.data() };
 
     req.user = serializeUser(user);
     next();
